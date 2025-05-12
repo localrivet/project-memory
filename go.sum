@@ -32,6 +32,8 @@ github.com/localrivet/gomcp v1.0.9 h1:2x2dwRhZDLNo7LIZ9qrYNKW1kYZ7GiMr96psX21kJF
 github.com/localrivet/gomcp v1.0.9/go.mod h1:afKxPzo5VufBhTVNJivdnePg1Y3I4NAKPCfsrzM6Fq4=
 github.com/localrivet/gomcp v1.0.10 h1:mwqyLafpI1dLEAyKqlGVk3lvpYJ+M5VlA9YWbmxD7vQ=
 github.com/localrivet/gomcp v1.0.10/go.mod h1:7Fg2aOOEmzOuhYLgSrHP8cxoKOO0CeLmboHKOf7eiNA=
+github.com/localrivet/gomcp v1.1.4 h1:qIFAZyyCU/oNpQ27qFmje9+13XuV1F39QgYOez9T0Go=
+github.com/localrivet/gomcp v1.1.4/go.mod h1:hJhlsxpNVyOtdyY6EUgpslQcIaUPIcJWnpqRE6X5rYs=
 github.com/localrivet/wilduri v0.0.0-20250504021349-6ce732e97cca h1:q0KYRv+ktfm8KnMROXcRNJEnfXSI3NZ45aMC8T/mg14=
 github.com/localrivet/wilduri v0.0.0-20250504021349-6ce732e97cca/go.mod h1:8B25VIq6WUPYAdY3aodQnj/hDNmYTcPgzzc7ZZ1++NI=
 github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyuac5Z2hdY=
