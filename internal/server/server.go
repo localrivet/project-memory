@@ -1,4 +1,4 @@
-// Package server provides the MCP server implementation for the Project-Memory service.
+// Package server provides the MCP server implementation for the ProjectMemory service.
 package server
 
 import (
@@ -51,15 +51,24 @@ func (s *MCPContextToolServer) Initialize() error {
 	}
 
 	// Create the MCP server
-	s.mcpServer = gomcp.NewServer("project-memory").
+	s.mcpServer = gomcp.NewServer("projectmemory").
 		// Register save_context tool
 		Tool(tools.ToolSaveContext, "Save context to the persistent memory store",
 			s.handleSaveContext).
 		// Register retrieve_context tool
 		Tool(tools.ToolRetrieveContext, "Retrieve relevant context based on a query",
-			s.handleRetrieveContext)
+			s.handleRetrieveContext).
+		// Register delete_context tool
+		Tool(tools.ToolDeleteContext, "Delete a specific context entry by ID",
+			s.handleDeleteContext).
+		// Register clear_all_context tool
+		Tool(tools.ToolClearAllContext, "Clear all context entries from the store",
+			s.handleClearAllContext).
+		// Register replace_context tool
+		Tool(tools.ToolReplaceContext, "Replace an existing context entry with new content",
+			s.handleReplaceContext)
 
-	s.log.Info("MCP Context Tool Server initialized successfully with %d tools", 2)
+	s.log.Info("MCP Context Tool Server initialized successfully with %d tools", 5)
 	return nil
 }
 
@@ -206,5 +215,159 @@ func (s *MCPContextToolServer) handleRetrieveContext(ctx *server.Context, req to
 	reqLogger.Info("Successfully retrieved %d context results", len(results))
 
 	// Return response
+	return response, nil
+}
+
+// handleDeleteContext handles the delete_context MCP tool call.
+func (s *MCPContextToolServer) handleDeleteContext(ctx *server.Context, req tools.DeleteContextRequest) (tools.DeleteContextResponse, error) {
+	reqLogger := s.log.WithContext("delete_context")
+	reqLogger.Debug("Processing delete_context request (ID: %s)", req.ID)
+
+	response := tools.DeleteContextResponse{
+		Status: "success",
+	}
+
+	// Validate the ID
+	if req.ID == "" {
+		err := logger.ValidationError(errors.New("ID is required"), "missing ID parameter")
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = "ID is required"
+		return response, nil
+	}
+
+	// Delete the context entry
+	err := s.store.DeleteContext(req.ID)
+	if err != nil {
+		err = logger.DatabaseError(err, "failed to delete context entry").
+			WithField("context_id", req.ID)
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = err.Error()
+		return response, nil
+	}
+
+	reqLogger.Info("Successfully deleted context with ID: %s", req.ID)
+	return response, nil
+}
+
+// handleClearAllContext handles the clear_all_context MCP tool call.
+func (s *MCPContextToolServer) handleClearAllContext(ctx *server.Context, req tools.ClearAllContextRequest) (tools.ClearAllContextResponse, error) {
+	reqLogger := s.log.WithContext("clear_all_context")
+	reqLogger.Debug("Processing clear_all_context request")
+
+	response := tools.ClearAllContextResponse{
+		Status: "success",
+	}
+
+	// Validate the confirmation
+	if req.Confirmation != "confirm" {
+		err := logger.ValidationError(
+			errors.New("confirmation is required"),
+			"confirmation must be 'confirm' to clear all context")
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = "confirmation must be 'confirm' to clear all context"
+		return response, nil
+	}
+
+	// Clear all context entries
+	err := s.store.ClearAllContext()
+	if err != nil {
+		err = logger.DatabaseError(err, "failed to clear all context entries")
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = err.Error()
+		return response, nil
+	}
+
+	reqLogger.Info("Successfully cleared all context entries")
+	return response, nil
+}
+
+// handleReplaceContext handles the replace_context MCP tool call.
+func (s *MCPContextToolServer) handleReplaceContext(ctx *server.Context, req tools.ReplaceContextRequest) (tools.ReplaceContextResponse, error) {
+	reqLogger := s.log.WithContext("replace_context")
+	reqLogger.Debug("Processing replace_context request (ID: %s, text length: %d)", req.ID, len(req.ContextText))
+
+	response := tools.ReplaceContextResponse{
+		Status: "success",
+	}
+
+	// Validate inputs
+	if req.ID == "" {
+		err := logger.ValidationError(errors.New("ID is required"), "missing ID parameter")
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = "ID is required"
+		return response, nil
+	}
+
+	if req.ContextText == "" {
+		err := logger.ValidationError(errors.New("context_text is required"), "missing context_text parameter")
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = "context_text is required"
+		return response, nil
+	}
+
+	// Generate summary
+	reqLogger.Debug("Generating summary")
+	summary, err := s.summarizer.Summarize(req.ContextText)
+	if err != nil {
+		err = logger.APIError(err, "failed to summarize text").
+			WithField("text_length", len(req.ContextText))
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = err.Error()
+		return response, nil
+	}
+
+	// Create embedding
+	reqLogger.Debug("Creating embedding")
+	embedding, err := s.embedder.CreateEmbedding(summary)
+	if err != nil {
+		err = logger.APIError(err, "failed to create embedding").
+			WithField("summary_length", len(summary))
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = err.Error()
+		return response, nil
+	}
+
+	// Convert embedding to bytes
+	embeddingBytes, err := vector.Float32SliceToBytes(embedding)
+	if err != nil {
+		err = logger.APIError(err, "failed to convert embedding to bytes").
+			WithField("embedding_size", len(embedding))
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = err.Error()
+		return response, nil
+	}
+
+	// Replace in context store
+	reqLogger.Debug("Replacing context with ID: %s", req.ID)
+	err = s.store.ReplaceContext(req.ID, summary, embeddingBytes, time.Now())
+	if err != nil {
+		err = logger.DatabaseError(err, "failed to replace context entry").
+			WithField("context_id", req.ID)
+		logger.LogError(err)
+
+		response.Status = "error"
+		response.Error = err.Error()
+		return response, nil
+	}
+
+	reqLogger.Info("Successfully replaced context with ID: %s", req.ID)
 	return response, nil
 }

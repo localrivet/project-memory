@@ -1,4 +1,4 @@
-// Package logger provides a structured logging system for the project-memory service.
+// Package logger provides a structured logging system for the projectmemory service.
 package logger
 
 import (
@@ -67,7 +67,7 @@ func DefaultConfig() *Config {
 		Level:       INFO,
 		Format:      TEXT,
 		Output:      os.Stderr,
-		DefaultTags: map[string]interface{}{"service": "project-memory"},
+		DefaultTags: map[string]interface{}{"service": "projectmemory"},
 	}
 }
 

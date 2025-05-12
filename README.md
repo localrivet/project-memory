@@ -1,13 +1,13 @@
-# Project-Memory
+# ProjectMemory
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/localrivet/projectmemory.svg)](https://pkg.go.dev/github.com/localrivet/projectmemory)
 [![Go Report Card](https://goreportcard.com/badge/github.com/localrivet/projectmemory)](https://goreportcard.com/report/github.com/localrivet/projectmemory)
 
-Project-Memory is an MCP (Model Context Protocol) server that provides persistent storage for conversation context information using SQLite. This allows LLMs to remember and retrieve relevant information from past interactions.
+ProjectMemory is an MCP (Model Context Protocol) server that provides persistent storage for conversation context information using SQLite. This allows LLMs to remember and retrieve relevant information from past interactions.
 
 ## Overview
 
-Project-Memory implements two MCP tools:
+ProjectMemory implements two MCP tools:
 
 1. `save_context` - Saves context (conversation snippets, inputs, outputs) to a persistent store
 2. `retrieve_context` - Retrieves relevant context based on semantic search
@@ -66,13 +66,13 @@ go run cmd/project-memory/main.go
 
 ## Using as a Library
 
-Project-Memory can be used as a library in your Go applications in multiple ways:
+ProjectMemory can be used as a library in your Go applications in multiple ways:
 
 1. **Direct Component Usage** - Directly use the core components for maximum control
 2. **Helper Functions** - Use the `CreateComponents` helper for easier initialization
 3. **High-Level API** - Use the Server API for simplified operations
 
-These approaches allow you to integrate Project-Memory with your existing MCP server without conflicts. For detailed instructions and examples, see our [Library Usage Guide](docs/library_usage.md) and our comprehensive [Embedding Guide](docs/embedding_guide.md).
+These approaches allow you to integrate ProjectMemory with your existing MCP server without conflicts. For detailed instructions and examples, see our [Library Usage Guide](docs/library_usage.md) and our comprehensive [Embedding Guide](docs/embedding_guide.md).
 
 ### Quick Example
 
@@ -145,6 +145,61 @@ For a complete example of integrating with an existing MCP server, see `examples
 {
   "status": "success",
   "results": ["Matching context entry 1", "Matching context entry 2", "..."]
+}
+```
+
+### Tool: delete_context
+
+**Request:**
+
+```json
+{
+  "id": "context-entry-id-to-delete"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "success"
+}
+```
+
+### Tool: clear_all_context
+
+**Request:**
+
+```json
+{
+  "confirmation": "confirm"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "success"
+}
+```
+
+### Tool: replace_context
+
+**Request:**
+
+```json
+{
+  "id": "context-entry-id-to-replace",
+  "context_text": "The new text to replace the existing context"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "success"
 }
 ```
 

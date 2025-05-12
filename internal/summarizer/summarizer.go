@@ -1,5 +1,5 @@
 // Package summarizer provides interfaces and implementations for
-// summarizing text content within the Project-Memory service.
+// summarizing text content within the ProjectMemory service.
 package summarizer
 
 const (

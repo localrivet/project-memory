@@ -13,7 +13,7 @@ import (
 	"github.com/localrivet/projectmemory/internal/vector"
 )
 
-// Config represents the configuration structure for the Project-Memory service.
+// Config represents the configuration structure for the ProjectMemory service.
 type Config struct {
 	Models struct {
 		Provider    string  `json:"provider"`
@@ -34,7 +34,7 @@ func main() {
 	// Initialize logging first thing
 	appLogger := setupLogging()
 
-	appLogger.Info("Project-Memory MCP Server - Starting...")
+	appLogger.Info("ProjectMemory MCP Server - Starting...")
 
 	// Load configuration
 	config, err := loadConfig()

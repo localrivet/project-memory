@@ -54,6 +54,25 @@ func main() {
     queryEmbedding, _ := emb.CreateEmbedding(query)
     results, _ := store.Search(queryEmbedding, 5)
     fmt.Println("Results:", results)
+
+    // Delete a specific context entry
+    err := store.DeleteContext(id)
+    if err != nil {
+        fmt.Printf("Error deleting context: %v\n", err)
+    }
+
+    // Replace a context entry
+    newText := "Updated information: API keys now need to be rotated every 60 days."
+    newSummary, _ := summ.Summarize(newText)
+    newEmbedding, _ := emb.CreateEmbedding(newSummary)
+    newEmbeddingBytes, _ := vector.Float32SliceToBytes(newEmbedding)
+    store.ReplaceContext(id, newSummary, newEmbeddingBytes, time.Now())
+
+    // Clear all context when needed
+    err = store.ClearAllContext()
+    if err != nil {
+        fmt.Printf("Error clearing all context: %v\n", err)
+    }
 }
 ```
 
@@ -191,6 +210,22 @@ if err != nil {
 results, err := pmServer.RetrieveContext("information", 5)
 if err != nil {
     log.Printf("Error retrieving context: %v", err)
+}
+
+// Use memory management methods
+err = pmServer.DeleteContext(id)
+if err != nil {
+    log.Printf("Error deleting context: %v", err)
+}
+
+err = pmServer.ReplaceContext(id, "Updated information to remember")
+if err != nil {
+    log.Printf("Error replacing context: %v", err)
+}
+
+err = pmServer.ClearAllContext()
+if err != nil {
+    log.Printf("Error clearing all context: %v", err)
 }
 
 // Access components if needed

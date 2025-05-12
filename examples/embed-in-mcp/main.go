@@ -4,7 +4,7 @@ import (
 	"github.com/localrivet/gomcp"
 	gomcpserver "github.com/localrivet/gomcp/server"
 
-	// Import the project-memory packages
+	// Import the projectmemory packages
 
 	"time"
 
@@ -26,7 +26,7 @@ func main() {
 	// OPTION 1: DIRECT COMPONENT USAGE (Recommended for embedding)
 	// ====================================================================
 
-	// Initialize Project-Memory components directly
+	// Initialize ProjectMemory components directly
 	store := contextstore.NewSQLiteContextStore()
 	if err := store.Initialize(".projectmemory.db"); err != nil {
 		log.Fatal("Failed to initialize context store: %v", err)
@@ -64,7 +64,7 @@ func main() {
 		fmt.Println("Retrieved results:", results)
 	*/
 
-	// Initialize the Project-Memory context tool server - BUT DON'T START IT
+	// Initialize the ProjectMemory context tool server - BUT DON'T START IT
 	// We're directly creating the concrete implementation to avoid type assertion issues
 	contextToolServer := pmserver.NewContextToolServer(store, summ, emb)
 	if err := contextToolServer.Initialize(); err != nil {
@@ -95,7 +95,7 @@ func main() {
 		config := projectmemory.DefaultConfig()
 		pmServer, err := projectmemory.NewServer(config)
 		if err != nil {
-			log.Fatal("Failed to create Project-Memory server: %v", err)
+			log.Fatal("Failed to create ProjectMemory server: %v", err)
 		}
 
 		// You can use the high-level methods
@@ -216,7 +216,7 @@ func main() {
 		})
 
 	// Start your combined MCP server
-	log.Info("Starting combined MCP server with Project-Memory tools...")
+	log.Info("Starting combined MCP server with ProjectMemory tools...")
 	mcpServer.AsStdio().Run()
 }
 

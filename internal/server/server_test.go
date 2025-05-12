@@ -16,6 +16,9 @@ type MockStore struct {
 	StoredSummaries  []string
 	StoredEmbeddings [][]byte
 	SearchResults    []string
+	DeletedIDs       []string
+	ClearedAll       bool
+	ReplacedIDs      []string
 	ReturnError      bool
 }
 
@@ -52,6 +55,34 @@ func (m *MockStore) Search(queryEmbedding []float32, limit int) ([]string, error
 		return m.SearchResults[:limit], nil
 	}
 	return m.SearchResults, nil
+}
+
+// DeleteContext implements the contextstore.ContextStore.DeleteContext method
+func (m *MockStore) DeleteContext(id string) error {
+	if m.ReturnError {
+		return testError
+	}
+	m.DeletedIDs = append(m.DeletedIDs, id)
+	return nil
+}
+
+// ClearAllContext implements the contextstore.ContextStore.ClearAllContext method
+func (m *MockStore) ClearAllContext() error {
+	if m.ReturnError {
+		return testError
+	}
+	m.ClearedAll = true
+	return nil
+}
+
+// ReplaceContext implements the contextstore.ContextStore.ReplaceContext method
+func (m *MockStore) ReplaceContext(id string, summaryText string, embedding []byte, timestamp time.Time) error {
+	if m.ReturnError {
+		return testError
+	}
+	m.ReplacedIDs = append(m.ReplacedIDs, id)
+	// Since our mock implementation of Store just appends, we need to track replacements separately
+	return m.Store(id, summaryText, embedding, timestamp)
 }
 
 // MockSummarizer implements the summarizer.Summarizer interface for testing
@@ -294,5 +325,178 @@ func TestErrorHandling(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDeleteContext tests the delete_context tool handler
+func TestDeleteContext(t *testing.T) {
+	// Setup mocks
+	mockStore := &MockStore{
+		DeletedIDs: []string{},
+	}
+	mockSummarizer := &MockSummarizer{}
+	mockEmbedder := &MockEmbedder{}
+
+	// Create server
+	server := NewContextToolServer(mockStore, mockSummarizer, mockEmbedder)
+	err := server.Initialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize server: %v", err)
+	}
+
+	// Create request
+	req := tools.DeleteContextRequest{
+		ID: "test-context-id",
+	}
+
+	// Call handler directly
+	response, err := server.handleDeleteContext(nil, req)
+	if err != nil {
+		t.Fatalf("Handler returned error: %v", err)
+	}
+
+	// Verify response
+	if response.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", response.Status)
+	}
+
+	// Verify store was called with correct ID
+	if len(mockStore.DeletedIDs) != 1 {
+		t.Fatalf("Expected 1 deleted ID, got %d", len(mockStore.DeletedIDs))
+	}
+	if mockStore.DeletedIDs[0] != "test-context-id" {
+		t.Errorf("Expected ID 'test-context-id', got '%s'", mockStore.DeletedIDs[0])
+	}
+}
+
+// TestClearAllContext tests the clear_all_context tool handler
+func TestClearAllContext(t *testing.T) {
+	// Setup mocks
+	mockStore := &MockStore{}
+	mockSummarizer := &MockSummarizer{}
+	mockEmbedder := &MockEmbedder{}
+
+	// Create server
+	server := NewContextToolServer(mockStore, mockSummarizer, mockEmbedder)
+	err := server.Initialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize server: %v", err)
+	}
+
+	// Create request
+	req := tools.ClearAllContextRequest{
+		Confirmation: "confirm", // Using the correct confirmation string
+	}
+
+	// Call handler directly
+	response, err := server.handleClearAllContext(nil, req)
+	if err != nil {
+		t.Fatalf("Handler returned error: %v", err)
+	}
+
+	// Verify response
+	if response.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", response.Status)
+	}
+
+	// Verify store was called
+	if !mockStore.ClearedAll {
+		t.Fatalf("Expected ClearAllContext to be called on the store")
+	}
+}
+
+// TestReplaceContext tests the replace_context tool handler
+func TestReplaceContext(t *testing.T) {
+	// Setup mocks
+	mockStore := &MockStore{
+		ReplacedIDs: []string{},
+	}
+
+	mockSummarizer := &MockSummarizer{
+		Summaries: map[string]string{
+			"This is updated context": "Updated context summary",
+		},
+	}
+
+	mockEmbedder := &MockEmbedder{
+		Embeddings: map[string][]float32{
+			"Updated context summary": {0.5, 0.6, 0.7, 0.8},
+		},
+	}
+
+	// Create server
+	server := NewContextToolServer(mockStore, mockSummarizer, mockEmbedder)
+	err := server.Initialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize server: %v", err)
+	}
+
+	// Create request
+	req := tools.ReplaceContextRequest{
+		ID:          "existing-context-id",
+		ContextText: "This is updated context",
+	}
+
+	// Call handler directly
+	response, err := server.handleReplaceContext(nil, req)
+	if err != nil {
+		t.Fatalf("Handler returned error: %v", err)
+	}
+
+	// Verify response
+	if response.Status != "success" {
+		t.Errorf("Expected status 'success', got '%s'", response.Status)
+	}
+
+	// Verify store.ReplaceContext was called with correct ID
+	if len(mockStore.ReplacedIDs) != 1 {
+		t.Fatalf("Expected 1 replaced ID, got %d", len(mockStore.ReplacedIDs))
+	}
+	if mockStore.ReplacedIDs[0] != "existing-context-id" {
+		t.Errorf("Expected ID 'existing-context-id', got '%s'", mockStore.ReplacedIDs[0])
+	}
+
+	// Verify the content was summarized and embedded
+	if len(mockStore.StoredSummaries) != 1 {
+		t.Fatalf("Expected 1 stored summary, got %d", len(mockStore.StoredSummaries))
+	}
+	if mockStore.StoredSummaries[0] != "Updated context summary" {
+		t.Errorf("Expected summary 'Updated context summary', got '%s'", mockStore.StoredSummaries[0])
+	}
+}
+
+// TestClearAllContextWithoutConfirmation tests that clear_all_context requires confirmation
+func TestClearAllContextWithoutConfirmation(t *testing.T) {
+	// Setup mocks
+	mockStore := &MockStore{}
+	mockSummarizer := &MockSummarizer{}
+	mockEmbedder := &MockEmbedder{}
+
+	// Create server
+	server := NewContextToolServer(mockStore, mockSummarizer, mockEmbedder)
+	err := server.Initialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize server: %v", err)
+	}
+
+	// Create request without confirmation
+	req := tools.ClearAllContextRequest{
+		Confirmation: "no", // Using string confirmation instead of boolean
+	}
+
+	// Call handler directly
+	response, err := server.handleClearAllContext(nil, req)
+	if err != nil {
+		t.Fatalf("Handler returned error: %v", err)
+	}
+
+	// Verify response indicates error
+	if response.Status != "error" {
+		t.Errorf("Expected status 'error', got '%s'", response.Status)
+	}
+
+	// Verify store was NOT called
+	if mockStore.ClearedAll {
+		t.Fatalf("ClearAllContext should not have been called without confirmation")
 	}
 }

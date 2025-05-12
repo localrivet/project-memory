@@ -1,5 +1,5 @@
-// Package contextstore provides storage interfaces and implementations for
-// the context data used by the Project-Memory service.
+// Package contextstore provides the storage components for
+// the context data used by the ProjectMemory service.
 package contextstore
 
 import (
@@ -19,4 +19,15 @@ type ContextStore interface {
 
 	// Search searches for context entries similar to the given embedding.
 	Search(queryEmbedding []float32, limit int) ([]string, error)
+
+	// DeleteContext deletes a specific context entry from the store by ID.
+	DeleteContext(id string) error
+
+	// ClearAllContext removes all context entries from the store.
+	ClearAllContext() error
+
+	// ReplaceContext replaces a context entry with updated information.
+	// Note: The current Store method performs replacement when an ID already exists,
+	// but this method makes the intent clearer.
+	ReplaceContext(id string, summaryText string, embedding []byte, timestamp time.Time) error
 }

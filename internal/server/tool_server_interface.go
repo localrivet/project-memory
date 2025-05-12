@@ -1,4 +1,4 @@
-// Package server provides the MCP server implementation for the Project-Memory service.
+// Package server provides the MCP server implementation for the ProjectMemory service.
 package server
 
 // ContextToolServer defines the interface for the MCP server that handles

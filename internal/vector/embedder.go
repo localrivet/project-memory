@@ -1,5 +1,5 @@
-// Package vector provides interfaces and utilities for vector operations
-// and text embedding within the Project-Memory service.
+// Package vector provides vector embedding utilities
+// and text embedding within the ProjectMemory service.
 package vector
 
 const (

@@ -188,3 +188,51 @@ func (s *SQLiteContextStore) Search(queryEmbedding []float32, limit int) ([]stri
 
 	return topSummaries, nil
 }
+
+// DeleteContext deletes a specific context entry from the store by ID.
+func (s *SQLiteContextStore) DeleteContext(id string) error {
+	deleteSQL := `DELETE FROM context_memory WHERE id = ?;`
+
+	stmt, err := s.conn.Prepare(deleteSQL)
+	if err != nil {
+		return fmt.Errorf("failed to prepare delete statement: %w", err)
+	}
+	defer stmt.Reset()
+
+	// Bind the ID parameter
+	stmt.BindText(1, id)
+
+	// Execute the statement
+	_, err = stmt.Step()
+	if err != nil {
+		return fmt.Errorf("failed to delete context entry: %w", err)
+	}
+
+	return nil
+}
+
+// ClearAllContext removes all context entries from the store.
+func (s *SQLiteContextStore) ClearAllContext() error {
+	clearSQL := `DELETE FROM context_memory;`
+
+	stmt, err := s.conn.Prepare(clearSQL)
+	if err != nil {
+		return fmt.Errorf("failed to prepare clear statement: %w", err)
+	}
+	defer stmt.Reset()
+
+	// Execute the statement
+	_, err = stmt.Step()
+	if err != nil {
+		return fmt.Errorf("failed to clear context entries: %w", err)
+	}
+
+	return nil
+}
+
+// ReplaceContext replaces a context entry with updated information.
+// Note: This is similar to Store with INSERT OR REPLACE, but makes the intent clearer.
+func (s *SQLiteContextStore) ReplaceContext(id string, summaryText string, embedding []byte, timestamp time.Time) error {
+	// Implementation is identical to Store since we're using INSERT OR REPLACE
+	return s.Store(id, summaryText, embedding, timestamp)
+}

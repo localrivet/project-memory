@@ -16,7 +16,7 @@ import (
 	"github.com/localrivet/projectmemory/internal/vector"
 )
 
-// Config represents the configuration structure for the Project-Memory service.
+// Config represents the configuration structure for the ProjectMemory service.
 type Config struct {
 	Models struct {
 		Provider    string  `json:"provider"`
@@ -46,7 +46,7 @@ func DefaultConfig() *Config {
 	return config
 }
 
-// Server represents a Project-Memory server instance
+// Server represents a ProjectMemory server instance
 type Server struct {
 	toolServer server.ContextToolServer
 	store      contextstore.ContextStore
@@ -55,7 +55,7 @@ type Server struct {
 	logger     *logger.Logger
 }
 
-// NewServer creates a new Project-Memory server with the provided configuration
+// NewServer creates a new ProjectMemory server with the provided configuration
 func NewServer(config *Config) (*Server, error) {
 	// Initialize logging
 	loggerConfig := logger.DefaultConfig()
@@ -102,12 +102,12 @@ func NewServer(config *Config) (*Server, error) {
 	}, nil
 }
 
-// Start starts the Project-Memory server
+// Start starts the ProjectMemory server
 func (s *Server) Start() error {
 	return s.toolServer.Start()
 }
 
-// Stop gracefully stops the Project-Memory server
+// Stop gracefully stops the ProjectMemory server
 func (s *Server) Stop() error {
 	if err := s.toolServer.Stop(); err != nil {
 		return err
@@ -185,6 +185,57 @@ func (s *Server) RetrieveContext(query string, limit int) ([]string, error) {
 	return results, nil
 }
 
+// DeleteContext deletes a specific context entry by ID
+func (s *Server) DeleteContext(id string) error {
+	if id == "" {
+		return fmt.Errorf("ID is required")
+	}
+
+	return s.store.DeleteContext(id)
+}
+
+// ClearAllContext removes all context entries from the store
+func (s *Server) ClearAllContext() error {
+	return s.store.ClearAllContext()
+}
+
+// ReplaceContext replaces an existing context with new content
+func (s *Server) ReplaceContext(id string, contextText string) (string, error) {
+	if id == "" {
+		return "", fmt.Errorf("ID is required")
+	}
+
+	if contextText == "" {
+		return "", fmt.Errorf("context text is required")
+	}
+
+	// Generate summary
+	summary, err := s.summarizer.Summarize(contextText)
+	if err != nil {
+		return "", err
+	}
+
+	// Create embedding
+	embedding, err := s.embedder.CreateEmbedding(summary)
+	if err != nil {
+		return "", err
+	}
+
+	// Convert embedding to bytes
+	embeddingBytes, err := vector.Float32SliceToBytes(embedding)
+	if err != nil {
+		return "", err
+	}
+
+	// Replace in context store
+	err = s.store.ReplaceContext(id, summary, embeddingBytes, time.Now())
+	if err != nil {
+		return "", err
+	}
+
+	return id, nil
+}
+
 // GetLogger returns the server's logger
 func (s *Server) GetLogger() *logger.Logger {
 	return s.logger
@@ -206,7 +257,7 @@ func (s *Server) GetEmbedder() vector.Embedder {
 }
 
 // CreateComponents creates and initializes the core components without starting the server.
-// This is useful when you want to use Project-Memory components in your own MCP server.
+// This is useful when you want to use ProjectMemory components in your own MCP server.
 func CreateComponents(config *Config) (contextstore.ContextStore, summarizer.Summarizer, vector.Embedder, error) {
 	// Initialize context store
 	store := contextstore.NewSQLiteContextStore()
