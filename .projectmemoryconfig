@@ -1,0 +1,51 @@
+{
+    "models": {
+        "provider": "mock",
+        "modelId": "mock-model",
+        "maxTokens": 1024,
+        "temperature": 0.7
+    },
+    "database": {
+        "path": ".projectmemory.db"
+    },
+    "summarizer": {
+        "provider": "anthropic",
+        "modelId": "claude-3-opus-20240229",
+        "maxSummaryLength": 500,
+        "preserveKeyTerms": true,
+        "fallbackProviders": [
+            {
+                "provider": "openai",
+                "modelId": "gpt-4o"
+            },
+            {
+                "provider": "google",
+                "modelId": "gemini-1.5-pro"
+            },
+            {
+                "provider": "xai",
+                "modelId": "grok-1"
+            }
+        ]
+    },
+    "apiKeys": {
+        "anthropic": "${ANTHROPIC_API_KEY}",
+        "openai": "${OPENAI_API_KEY}",
+        "google": "${GOOGLE_API_KEY}",
+        "xai": "${XAI_API_KEY}"
+    },
+    "cache": {
+        "enabled": true,
+        "ttl": 86400,
+        "capacity": 1000
+    },
+    "retry": {
+        "maxRetries": 3,
+        "initialDelay": 1000,
+        "maxDelay": 10000
+    },
+    "logging": {
+        "level": "INFO",
+        "format": "TEXT"
+    }
+}
