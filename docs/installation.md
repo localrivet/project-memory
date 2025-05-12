@@ -16,7 +16,7 @@ Before installing Project-Memory, ensure you have the following prerequisites in
 The simplest way to install Project-Memory is using Go's package manager:
 
 ```bash
-go get github.com/localrivet/project-memory
+go get github.com/localrivet/projectmemory
 ```
 
 This will download the source code and its dependencies.
@@ -26,7 +26,7 @@ This will download the source code and its dependencies.
 For development or to make modifications, you can clone the repository:
 
 ```bash
-git clone https://github.com/localrivet/project-memory.git
+git clone https://github.com/localrivet/projectmemory.git
 cd project-memory
 go mod download  # Download dependencies
 ```
@@ -63,7 +63,7 @@ Once installed and configured, you can run the Project-Memory server:
 
 ```bash
 # If installed via go get
-go run github.com/localrivet/project-memory/cmd/project-memory
+go run github.com/localrivet/projectmemory/cmd/project-memory
 
 # If cloned from repository
 cd project-memory
@@ -90,5 +90,5 @@ To verify that Project-Memory is running correctly:
 
 If you encounter issues not covered in this guide:
 
-- Check the [GitHub Issues](https://github.com/localrivet/project-memory/issues) for similar problems
+- Check the [GitHub Issues](https://github.com/localrivet/projectmemory/issues) for similar problems
 - Create a new issue with detailed information about your environment and the error

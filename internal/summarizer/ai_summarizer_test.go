@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/localrivet/project-memory/internal/summarizer/providers"
+	"github.com/localrivet/projectmemory/internal/summarizer/providers"
 )
 
 // MockLLMProvider implements the providers.LLMProvider interface for testing

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/localrivet/project-memory/internal/tools"
+	"github.com/localrivet/projectmemory/internal/tools"
 )
 
 var testError = errors.New("test error")

@@ -9,11 +9,11 @@ import (
 
 	"github.com/localrivet/gomcp"
 	"github.com/localrivet/gomcp/server"
-	"github.com/localrivet/project-memory/internal/contextstore"
-	"github.com/localrivet/project-memory/internal/logger"
-	"github.com/localrivet/project-memory/internal/summarizer"
-	"github.com/localrivet/project-memory/internal/tools"
-	"github.com/localrivet/project-memory/internal/vector"
+	"github.com/localrivet/projectmemory/internal/contextstore"
+	"github.com/localrivet/projectmemory/internal/logger"
+	"github.com/localrivet/projectmemory/internal/summarizer"
+	"github.com/localrivet/projectmemory/internal/tools"
+	"github.com/localrivet/projectmemory/internal/vector"
 )
 
 // Common server error types

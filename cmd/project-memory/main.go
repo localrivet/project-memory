@@ -6,11 +6,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/localrivet/project-memory/internal/contextstore"
-	"github.com/localrivet/project-memory/internal/logger"
-	"github.com/localrivet/project-memory/internal/server"
-	"github.com/localrivet/project-memory/internal/summarizer"
-	"github.com/localrivet/project-memory/internal/vector"
+	"github.com/localrivet/projectmemory/internal/contextstore"
+	"github.com/localrivet/projectmemory/internal/logger"
+	"github.com/localrivet/projectmemory/internal/server"
+	"github.com/localrivet/projectmemory/internal/summarizer"
+	"github.com/localrivet/projectmemory/internal/vector"
 )
 
 // Config represents the configuration structure for the Project-Memory service.

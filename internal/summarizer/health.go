@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/localrivet/project-memory/internal/telemetry"
+	"github.com/localrivet/projectmemory/internal/telemetry"
 )
 
 // HealthStatus represents the health status of a component

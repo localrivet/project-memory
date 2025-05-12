@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/localrivet/project-memory/internal/logger"
+	"github.com/localrivet/projectmemory/internal/logger"
 )
 
 func TestWriteErrorResponse(t *testing.T) {

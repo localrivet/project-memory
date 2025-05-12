@@ -14,10 +14,10 @@ This approach gives you the most control and avoids any MCP server conflicts. Yo
 import (
     "time"
 
-    "github.com/localrivet/project-memory"
-    "github.com/localrivet/project-memory/internal/contextstore"
-    "github.com/localrivet/project-memory/internal/summarizer"
-    "github.com/localrivet/project-memory/internal/vector"
+    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 func main() {
@@ -56,7 +56,7 @@ This approach uses a helper function to create all the components at once, which
 
 ```go
 import (
-    "github.com/localrivet/project-memory"
+    "github.com/localrivet/projectmemory"
 )
 
 func main() {
@@ -84,7 +84,7 @@ This approach uses the high-level Server API but avoids starting the MCP server.
 
 ```go
 import (
-    "github.com/localrivet/project-memory"
+    "github.com/localrivet/projectmemory"
 )
 
 func main() {
@@ -129,8 +129,8 @@ import (
     "github.com/localrivet/gomcp"
     gomcpserver "github.com/localrivet/gomcp/server"
 
-    "github.com/localrivet/project-memory"
-    "github.com/localrivet/project-memory/internal/tools"
+    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/tools"
 )
 
 func main() {

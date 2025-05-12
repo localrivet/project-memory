@@ -8,13 +8,13 @@ import (
 
 	"time"
 
-	projectmemory "github.com/localrivet/project-memory"
-	"github.com/localrivet/project-memory/internal/contextstore"
-	"github.com/localrivet/project-memory/internal/logger"
-	pmserver "github.com/localrivet/project-memory/internal/server" // Import with alias to avoid conflict
-	"github.com/localrivet/project-memory/internal/summarizer"
-	"github.com/localrivet/project-memory/internal/tools"
-	"github.com/localrivet/project-memory/internal/vector"
+	projectmemory "github.com/localrivet/projectmemory"
+	"github.com/localrivet/projectmemory/internal/contextstore"
+	"github.com/localrivet/projectmemory/internal/logger"
+	pmserver "github.com/localrivet/projectmemory/internal/server" // Import with alias to avoid conflict
+	"github.com/localrivet/projectmemory/internal/summarizer"
+	"github.com/localrivet/projectmemory/internal/tools"
+	"github.com/localrivet/projectmemory/internal/vector"
 )
 
 func main() {

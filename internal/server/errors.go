@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/localrivet/project-memory/internal/logger"
+	"github.com/localrivet/projectmemory/internal/logger"
 )
 
 // ErrorResponse represents the structure of error responses sent by the API

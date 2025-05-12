@@ -13,7 +13,7 @@ This guide provides information for developers who want to contribute to Project
 ### Getting the Source Code
 
 ```bash
-git clone https://github.com/localrivet/project-memory.git
+git clone https://github.com/localrivet/projectmemory.git
 cd project-memory
 go mod download
 ```

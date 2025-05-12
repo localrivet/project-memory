@@ -1,7 +1,7 @@
 # Project-Memory
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/localrivet/project-memory.svg)](https://pkg.go.dev/github.com/localrivet/project-memory)
-[![Go Report Card](https://goreportcard.com/badge/github.com/localrivet/project-memory)](https://goreportcard.com/report/github.com/localrivet/project-memory)
+[![Go Reference](https://pkg.go.dev/badge/github.com/localrivet/projectmemory.svg)](https://pkg.go.dev/github.com/localrivet/projectmemory)
+[![Go Report Card](https://goreportcard.com/badge/github.com/localrivet/projectmemory)](https://goreportcard.com/report/github.com/localrivet/projectmemory)
 
 Project-Memory is an MCP (Model Context Protocol) server that provides persistent storage for conversation context information using SQLite. This allows LLMs to remember and retrieve relevant information from past interactions.
 
@@ -78,10 +78,10 @@ These approaches allow you to integrate Project-Memory with your existing MCP se
 
 ```go
 import (
-    "github.com/localrivet/project-memory"
-    "github.com/localrivet/project-memory/internal/contextstore"
-    "github.com/localrivet/project-memory/internal/summarizer"
-    "github.com/localrivet/project-memory/internal/vector"
+    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 // Initialize components

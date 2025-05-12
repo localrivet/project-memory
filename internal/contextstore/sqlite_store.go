@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"crawshaw.io/sqlite"
-	"github.com/localrivet/project-memory/internal/vector"
+	"github.com/localrivet/projectmemory/internal/vector"
 )
 
 // SQLiteContextStore is an implementation of ContextStore that uses SQLite.

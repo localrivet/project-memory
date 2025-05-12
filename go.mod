@@ -1,4 +1,4 @@
-module github.com/localrivet/project-memory
+module github.com/localrivet/projectmemory
 
 go 1.24.2
 

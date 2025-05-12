@@ -22,10 +22,10 @@ import (
     "fmt"
     "time"
 
-    "github.com/localrivet/project-memory"
-    "github.com/localrivet/project-memory/internal/contextstore"
-    "github.com/localrivet/project-memory/internal/summarizer"
-    "github.com/localrivet/project-memory/internal/vector"
+    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 func main() {
@@ -67,7 +67,7 @@ func main() {
 ### Adding the Dependency
 
 ```bash
-go get github.com/localrivet/project-memory
+go get github.com/localrivet/projectmemory
 ```
 
 ### Verify Installation
@@ -79,7 +79,7 @@ package main
 
 import (
     "fmt"
-    "github.com/localrivet/project-memory"
+    "github.com/localrivet/projectmemory"
 )
 
 func main() {
@@ -214,10 +214,10 @@ import (
     "time"
 
     "github.com/spf13/cobra"
-    "github.com/localrivet/project-memory"
-    "github.com/localrivet/project-memory/internal/contextstore"
-    "github.com/localrivet/project-memory/internal/summarizer"
-    "github.com/localrivet/project-memory/internal/vector"
+    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 var store contextstore.ContextStore
@@ -328,10 +328,10 @@ import (
     "time"
 
     "github.com/gorilla/mux"
-    "github.com/localrivet/project-memory"
-    "github.com/localrivet/project-memory/internal/contextstore"
-    "github.com/localrivet/project-memory/internal/summarizer"
-    "github.com/localrivet/project-memory/internal/vector"
+    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 var store contextstore.ContextStore
@@ -489,11 +489,11 @@ import (
     "github.com/localrivet/gomcp"
     gomcpserver "github.com/localrivet/gomcp/server"
 
-    "github.com/localrivet/project-memory"
-    "github.com/localrivet/project-memory/internal/contextstore"
-    "github.com/localrivet/project-memory/internal/summarizer"
-    "github.com/localrivet/project-memory/internal/tools"
-    "github.com/localrivet/project-memory/internal/vector"
+    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/tools"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 func main() {
@@ -614,7 +614,7 @@ Here's how to create a custom embedder:
 package main
 
 import (
-    "github.com/localrivet/project-memory/internal/vector"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 // CustomEmbedder implements the vector.Embedder interface
@@ -671,7 +671,7 @@ Similarly, you can create custom summarizers:
 package main
 
 import (
-    "github.com/localrivet/project-memory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/summarizer"
 )
 
 // CustomSummarizer implements the summarizer.Summarizer interface
@@ -721,7 +721,7 @@ package main
 import (
     "time"
 
-    "github.com/localrivet/project-memory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/contextstore"
 )
 
 // This example assumes a SQLite context store with additional maintenance methods
@@ -778,10 +778,10 @@ import (
     "fmt"
     "time"
 
-    "github.com/localrivet/project-memory"
-    "github.com/localrivet/project-memory/internal/contextstore"
-    "github.com/localrivet/project-memory/internal/summarizer"
-    "github.com/localrivet/project-memory/internal/vector"
+    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 func main() {
@@ -843,7 +843,7 @@ package main
 import (
     "fmt"
 
-    "github.com/localrivet/project-memory"
+    "github.com/localrivet/projectmemory"
 )
 
 func main() {
@@ -936,7 +936,7 @@ Solution: Try recreating the database or check embedding dimensions.
 
 If you encounter issues not covered in this guide:
 
-1. Check the [GitHub repository](https://github.com/localrivet/project-memory/issues) for existing issues
+1. Check the [GitHub repository](https://github.com/localrivet/projectmemory/issues) for existing issues
 2. Review the logs for detailed error messages
 3. Create a new issue with detailed reproduction steps
 

@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/localrivet/project-memory/internal/summarizer/providers"
-	"github.com/localrivet/project-memory/internal/telemetry"
+	"github.com/localrivet/projectmemory/internal/summarizer/providers"
+	"github.com/localrivet/projectmemory/internal/telemetry"
 )
 
 const (
