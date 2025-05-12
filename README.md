@@ -72,7 +72,7 @@ Project-Memory can be used as a library in your Go applications in multiple ways
 2. **Helper Functions** - Use the `CreateComponents` helper for easier initialization
 3. **High-Level API** - Use the Server API for simplified operations
 
-These approaches allow you to integrate Project-Memory with your existing MCP server without conflicts. For detailed instructions and examples, see our [Library Usage Guide](docs/library_usage.md).
+These approaches allow you to integrate Project-Memory with your existing MCP server without conflicts. For detailed instructions and examples, see our [Library Usage Guide](docs/library_usage.md) and our comprehensive [Embedding Guide](docs/embedding_guide.md).
 
 ### Quick Example
 
@@ -156,6 +156,7 @@ For a complete example of integrating with an existing MCP server, see `examples
 - [Development Guide](docs/development.md)
 - [Architecture Documentation](docs/architecture.md)
 - [Library Usage Guide](docs/library_usage.md)
+- [Embedding Guide](docs/embedding_guide.md) - Comprehensive guide for embedding in your application
 
 ## License
 
