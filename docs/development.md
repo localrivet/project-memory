@@ -95,19 +95,17 @@ A mock implementation, `MockEmbedder`, is provided for testing and development. 
 
 ## Embedding as a Library
 
-### Method 1: Direct Integration
+Project-Memory can be used as a library in your applications. Please refer to our comprehensive [Library Usage Guide](library_usage.md) for detailed information on the various integration options.
 
-Import the packages you need:
+The Library Usage Guide covers:
 
-```go
-import (
-    "github.com/localrivet/project-memory/internal/contextstore"
-    "github.com/localrivet/project-memory/internal/summarizer"
-    "github.com/localrivet/project-memory/internal/vector"
-)
-```
+- Direct component usage (recommended approach)
+- Using the CreateComponents helper function
+- Using the Server API without starting the MCP server
+- Integrating with your own MCP server
+- Best practices for library integration
 
-Initialize the components:
+For a quick example of how to use Project-Memory components directly in your application, see the example below:
 
 ```go
 // Initialize store
@@ -135,15 +133,7 @@ embedding, _ := emb.CreateEmbedding(summary)
 // ...
 ```
 
-### Method 2: Using with MCP Server
-
-See the [examples/embed-in-mcp](../examples/embed-in-mcp/main.go) for a complete example of integrating Project-Memory into another MCP server.
-
-The key steps are:
-
-1. Initialize the components (store, summarizer, embedder)
-2. Create handlers for the Project-Memory tools in your MCP server
-3. Register these handlers with your server
+For a complete example, see [examples/embed-in-mcp/main.go](../examples/embed-in-mcp/main.go).
 
 ## Testing
 

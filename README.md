@@ -66,23 +66,28 @@ go run cmd/project-memory/main.go
 
 ## Using as a Library
 
-Project-Memory can be embedded as a library in another MCP server. This allows you to add persistent context capabilities to your existing MCP applications.
+Project-Memory can be used as a library in your Go applications in multiple ways:
 
-### Example: Embedding in Another MCP Server
+1. **Direct Component Usage** - Directly use the core components for maximum control
+2. **Helper Functions** - Use the `CreateComponents` helper for easier initialization
+3. **High-Level API** - Use the Server API for simplified operations
 
-See the `examples/embed-in-mcp/main.go` file for a complete example.
+These approaches allow you to integrate Project-Memory with your existing MCP server without conflicts. For detailed instructions and examples, see our [Library Usage Guide](docs/library_usage.md).
+
+### Quick Example
 
 ```go
 import (
+    "github.com/localrivet/project-memory"
     "github.com/localrivet/project-memory/internal/contextstore"
     "github.com/localrivet/project-memory/internal/summarizer"
     "github.com/localrivet/project-memory/internal/vector"
-    "github.com/localrivet/project-memory/internal/tools"
 )
 
 // Initialize components
 store := contextstore.NewSQLiteContextStore()
 store.Initialize(".projectmemory.db")
+defer store.Close()
 
 summ := summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
 summ.Initialize()
@@ -90,20 +95,17 @@ summ.Initialize()
 emb := vector.NewMockEmbedder(vector.DefaultEmbeddingDimensions)
 emb.Initialize()
 
-// Create your own MCP server
-mcpServer := gomcp.NewServer("your-server")
-
-// Add Project-Memory tools to your server
-mcpServer = mcpServer.Tool(tools.ToolSaveContext, "Save context",
-    func(ctx *server.Context, req tools.SaveContextRequest) (tools.SaveContextResponse, error) {
-        // Implementation using store, summ, and emb
-    })
-
-mcpServer = mcpServer.Tool(tools.ToolRetrieveContext, "Retrieve context",
-    func(ctx *server.Context, req tools.RetrieveContextRequest) (tools.RetrieveContextResponse, error) {
-        // Implementation using store, summ, and emb
-    })
+// Now you can use these components directly in your code
+// For example, to store context:
+testText := "This is a test context to save."
+summary, _ := summ.Summarize(testText)
+embedding, _ := emb.CreateEmbedding(summary)
+embeddingBytes, _ := vector.Float32SliceToBytes(embedding)
+id := projectmemory.GenerateHash(summary, time.Now().UnixNano())
+store.Store(id, summary, embeddingBytes, time.Now())
 ```
+
+For a complete example of integrating with an existing MCP server, see `examples/embed-in-mcp/main.go`.
 
 ## API Reference
 
@@ -145,6 +147,15 @@ mcpServer = mcpServer.Tool(tools.ToolRetrieveContext, "Retrieve context",
   "results": ["Matching context entry 1", "Matching context entry 2", "..."]
 }
 ```
+
+## Documentation
+
+- [Installation Guide](docs/installation.md)
+- [Configuration Reference](docs/configuration.md)
+- [API Reference](docs/api.md)
+- [Development Guide](docs/development.md)
+- [Architecture Documentation](docs/architecture.md)
+- [Library Usage Guide](docs/library_usage.md)
 
 ## License
 
