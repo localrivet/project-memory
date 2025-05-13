@@ -40,21 +40,34 @@ Create a `.projectmemoryconfig` file in the project root:
 
 ```json
 {
-  "models": {
-    "provider": "mock",
-    "modelId": "mock-model",
-    "maxTokens": 1024,
-    "temperature": 0.7
+  "store": {
+    "sqlite_path": ".projectmemory.db"
   },
-  "database": {
-    "path": ".projectmemory.db"
+  "summarizer": {
+    "provider": "basic"
+  },
+  "embedder": {
+    "provider": "mock",
+    "dimensions": 768
   },
   "logging": {
-    "level": "INFO",
-    "format": "TEXT"
+    "level": "info",
+    "format": "text"
   }
 }
 ```
+
+You can also use environment variables to override configuration values:
+
+```bash
+# Set the database path
+export SQLITE_PATH=".custom-db.db"
+
+# Set log level
+export LOG_LEVEL="debug"
+```
+
+For a detailed explanation of all configuration options, see the [Configuration Reference](docs/configuration.md).
 
 ### Running the Server
 
@@ -74,17 +87,52 @@ ProjectMemory can be used as a library in your Go applications in multiple ways:
 
 These approaches allow you to integrate ProjectMemory with your existing MCP server without conflicts. For detailed instructions and examples, see our [Library Usage Guide](docs/library_usage.md) and our comprehensive [Embedding Guide](docs/embedding_guide.md).
 
+### Custom Logging
+
+When embedding ProjectMemory in your application, you can override the default logger:
+
+```go
+import (
+    "github.com/localrivet/gomcp/logx"
+    "github.com/localrivet/projectmemory"
+)
+
+func main() {
+    // Create your custom logger
+    logger := logx.NewLogger("debug")
+
+    // Initialize the server with your custom logger
+    server, err := projectmemory.NewServer(".projectmemoryconfig", logger)
+    if err != nil {
+        logger.Error("Failed to create server: %v", err)
+    }
+
+    // Alternatively, you can create a server first and then set the logger
+    // server, err := projectmemory.NewServer(".projectmemoryconfig", nil)
+    // if err != nil {
+    //     // Handle error
+    // }
+    //
+    // server.WithLogger(logger)
+
+    // Now all ProjectMemory logs will be routed through your logger
+    // Continue with your application...
+}
+```
+
 ### Quick Example
 
 ```go
 import (
+    "time"
+
     "github.com/localrivet/projectmemory"
     "github.com/localrivet/projectmemory/internal/contextstore"
     "github.com/localrivet/projectmemory/internal/summarizer"
     "github.com/localrivet/projectmemory/internal/vector"
 )
 
-// Initialize components
+// Option 1: Use the components directly
 store := contextstore.NewSQLiteContextStore()
 store.Initialize(".projectmemory.db")
 defer store.Close()
@@ -103,6 +151,20 @@ embedding, _ := emb.CreateEmbedding(summary)
 embeddingBytes, _ := vector.Float32SliceToBytes(embedding)
 id := projectmemory.GenerateHash(summary, time.Now().UnixNano())
 store.Store(id, summary, embeddingBytes, time.Now())
+
+// Option 2: Use the high-level API with configuration
+cfg := projectmemory.DefaultConfig()
+cfg.Store.SQLitePath = ".custom-memory.db"
+pmServer, err := projectmemory.NewServer(".projectmemoryconfig", nil)
+if err != nil {
+    // Handle error
+}
+
+// Save context using the high-level API
+id, err = pmServer.SaveContext("This is a test context from the high-level API")
+if err != nil {
+    // Handle error
+}
 ```
 
 For a complete example of integrating with an existing MCP server, see `examples/embed-in-mcp/main.go`.

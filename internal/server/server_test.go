@@ -18,6 +18,7 @@ type MockStore struct {
 	SearchResults    []string
 	DeletedIDs       []string
 	ClearedAll       bool
+	ClearedCount     int
 	ReplacedIDs      []string
 	ReturnError      bool
 }
@@ -66,7 +67,16 @@ func (m *MockStore) DeleteContext(id string) error {
 	return nil
 }
 
-// ClearAllContext implements the contextstore.ContextStore.ClearAllContext method
+// Delete implements the contextstore.ContextStore.Delete method
+func (m *MockStore) Delete(id string) error {
+	if m.ReturnError {
+		return testError
+	}
+	m.DeletedIDs = append(m.DeletedIDs, id)
+	return nil
+}
+
+// ClearAllContext implements the contextstore.ContextStore.ClearAllContext method (legacy)
 func (m *MockStore) ClearAllContext() error {
 	if m.ReturnError {
 		return testError
@@ -75,8 +85,27 @@ func (m *MockStore) ClearAllContext() error {
 	return nil
 }
 
-// ReplaceContext implements the contextstore.ContextStore.ReplaceContext method
+// Clear implements the contextstore.ContextStore.Clear method
+func (m *MockStore) Clear() (int, error) {
+	if m.ReturnError {
+		return 0, testError
+	}
+	m.ClearedAll = true
+	return m.ClearedCount, nil
+}
+
+// ReplaceContext implements the contextstore.ContextStore.ReplaceContext method (legacy)
 func (m *MockStore) ReplaceContext(id string, summaryText string, embedding []byte, timestamp time.Time) error {
+	if m.ReturnError {
+		return testError
+	}
+	m.ReplacedIDs = append(m.ReplacedIDs, id)
+	// Since our mock implementation of Store just appends, we need to track replacements separately
+	return m.Store(id, summaryText, embedding, timestamp)
+}
+
+// Replace implements the contextstore.ContextStore.Replace method
+func (m *MockStore) Replace(id string, summaryText string, embedding []byte, timestamp time.Time) error {
 	if m.ReturnError {
 		return testError
 	}

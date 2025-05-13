@@ -90,6 +90,9 @@ type ClearAllContextResponse struct {
 	// Status indicates the result of the operation ("success" or "error")
 	Status string `json:"status"`
 
+	// DeletedCount contains the number of entries that were deleted
+	DeletedCount int `json:"deleted_count,omitempty"`
+
 	// Error contains an error message if Status is "error"
 	Error string `json:"error,omitempty"`
 }

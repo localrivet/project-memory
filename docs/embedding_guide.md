@@ -802,6 +802,77 @@ func ScheduleMaintenance(store contextstore.ContextStore) {
 }
 ```
 
+### Custom Logging
+
+When embedding ProjectMemory in a larger application, you often need to integrate with your application's existing logging infrastructure. ProjectMemory provides a flexible way to override the default logger.
+
+#### Using a Standard Go Logger
+
+```go
+package main
+
+import (
+    "io"
+    "log"
+    "os"
+
+    "github.com/localrivet/projectmemory"
+)
+
+func main() {
+    // Create a multi-writer to log to both stderr and a file
+    logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+    if err != nil {
+        log.Fatalf("Failed to open log file: %v", err)
+    }
+    defer logFile.Close()
+
+    multiWriter := io.MultiWriter(os.Stderr, logFile)
+
+    // Create your application's logger with a custom prefix
+    appLogger := log.New(multiWriter, "[MyApp] ", log.LstdFlags|log.Lshortfile)
+
+    // Convert it to a ProjectMemory-compatible logger
+    pmLogger := projectmemory.NewStandardLoggerAdapter(appLogger, "info", "text")
+
+    // Create the ProjectMemory server
+    config := projectmemory.DefaultConfig()
+    server, err := projectmemory.NewServer(config)
+    if err != nil {
+        appLogger.Fatalf("Failed to create ProjectMemory server: %v", err)
+    }
+
+    // Set the custom logger - MUST be done before any other operations
+    server.WithLogger(pmLogger)
+
+    // Now all ProjectMemory logs will go through your application's logger
+    // with your custom prefix, to both stderr and the log file
+}
+```
+
+#### Understanding Log Levels
+
+ProjectMemory supports the following log levels, from most to least verbose:
+
+1. `debug` - Detailed information for debugging
+2. `info` - General information about normal operation
+3. `warn` - Warning messages that don't affect operation
+4. `error` - Error messages that might affect operation
+5. `fatal` - Critical errors that cause the program to exit
+
+When you set a specific level, all messages at that level and higher severity are logged.
+
+#### JSON Logging for Production
+
+For production environments, structured JSON logging is often preferred:
+
+```go
+// Create a logger with JSON output format
+pmLogger := projectmemory.NewStandardLoggerAdapter(appLogger, "info", "json")
+```
+
+JSON logs include additional metadata like timestamps and caller information, making them easier to parse and analyze with log management tools.
+
 ## Examples
 
 ### Simple Save and Retrieve

@@ -20,14 +20,15 @@ type ContextStore interface {
 	// Search searches for context entries similar to the given embedding.
 	Search(queryEmbedding []float32, limit int) ([]string, error)
 
-	// DeleteContext deletes a specific context entry from the store by ID.
-	DeleteContext(id string) error
+	// Delete deletes a specific context entry from the store by ID.
+	Delete(id string) error
 
-	// ClearAllContext removes all context entries from the store.
-	ClearAllContext() error
+	// Clear removes all context entries from the store.
+	// Returns the number of entries that were deleted.
+	Clear() (int, error)
 
-	// ReplaceContext replaces a context entry with updated information.
+	// Replace replaces a context entry with updated information.
 	// Note: The current Store method performs replacement when an ID already exists,
 	// but this method makes the intent clearer.
-	ReplaceContext(id string, summaryText string, embedding []byte, timestamp time.Time) error
+	Replace(id string, summaryText string, embedding []byte, timestamp time.Time) error
 }

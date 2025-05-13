@@ -1,26 +1,27 @@
 package main
 
 import (
+	"os"
+
 	"github.com/localrivet/gomcp"
+	"github.com/localrivet/gomcp/logx"
 	gomcpserver "github.com/localrivet/gomcp/server"
 
 	// Import the projectmemory packages
-
 	"time"
 
-	projectmemory "github.com/localrivet/projectmemory"
 	"github.com/localrivet/projectmemory/internal/contextstore"
-	"github.com/localrivet/projectmemory/internal/logger"
 	pmserver "github.com/localrivet/projectmemory/internal/server" // Import with alias to avoid conflict
 	"github.com/localrivet/projectmemory/internal/summarizer"
 	"github.com/localrivet/projectmemory/internal/tools"
+	"github.com/localrivet/projectmemory/internal/util"
 	"github.com/localrivet/projectmemory/internal/vector"
 )
 
 func main() {
-	// Set up logging
-	log := logger.GetDefaultLogger()
-	log.Info("Starting combined MCP server...")
+	// Set up logging - ensure consistent logger usage throughout the application
+	logger := logx.NewLogger("info")
+	logger.Info("Starting combined MCP server...")
 
 	// ====================================================================
 	// OPTION 1: DIRECT COMPONENT USAGE (Recommended for embedding)
@@ -29,20 +30,23 @@ func main() {
 	// Initialize ProjectMemory components directly
 	store := contextstore.NewSQLiteContextStore()
 	if err := store.Initialize(".projectmemory.db"); err != nil {
-		log.Fatal("Failed to initialize context store: %v", err)
+		logger.Error("Failed to initialize context store: %v", err)
+		os.Exit(1)
 	}
 	defer store.Close()
 
 	// Initialize the summarizer
 	summ := summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
 	if err := summ.Initialize(); err != nil {
-		log.Fatal("Failed to initialize summarizer: %v", err)
+		logger.Error("Failed to initialize summarizer: %v", err)
+		os.Exit(1)
 	}
 
 	// Initialize the embedder
 	emb := vector.NewMockEmbedder(vector.DefaultEmbeddingDimensions)
 	if err := emb.Initialize(); err != nil {
-		log.Fatal("Failed to initialize embedder: %v", err)
+		logger.Error("Failed to initialize embedder: %v", err)
+		os.Exit(1)
 	}
 
 	// Sample direct usage (outside of MCP)
@@ -53,22 +57,26 @@ func main() {
 		summary, _ := summ.Summarize(testText)
 		embedding, _ := emb.CreateEmbedding(summary)
 		embeddingBytes, _ := vector.Float32SliceToBytes(embedding)
-		id := projectmemory.GenerateHash(summary, time.Now().UnixNano())
+		id := util.GenerateHash(summary, time.Now().UnixNano())
 		store.Store(id, summary, embeddingBytes, time.Now())
-		fmt.Printf("Stored context with ID: %s\n", id)
+		logger.Info("Stored context with ID: %s", id)
 
 		// Retrieve context example
 		queryText := "test context"
 		queryEmbedding, _ := emb.CreateEmbedding(queryText)
 		results, _ := store.Search(queryEmbedding, 5)
-		fmt.Println("Retrieved results:", results)
+		logger.Info("Retrieved %d results", len(results))
 	*/
 
 	// Initialize the ProjectMemory context tool server - BUT DON'T START IT
 	// We're directly creating the concrete implementation to avoid type assertion issues
 	contextToolServer := pmserver.NewContextToolServer(store, summ, emb)
+	// Pass the logger to the context tool server
+	contextToolServer.WithLogger(logger)
+
 	if err := contextToolServer.Initialize(); err != nil {
-		log.Fatal("Failed to initialize context tool server: %v", err)
+		logger.Error("Failed to initialize context tool server: %v", err)
+		os.Exit(1)
 	}
 
 	// ====================================================================
@@ -78,10 +86,11 @@ func main() {
 	// Alternative: Use the CreateComponents helper function
 	/*
 		config := projectmemory.DefaultConfig()
-		config.Database.Path = ".projectmemory-alt.db"
-		altStore, altSumm, altEmb, err := projectmemory.CreateComponents(config)
+		config.Store.SQLitePath = ".projectmemory-alt.db"
+		altStore, altSumm, altEmb, err := projectmemory.CreateComponents(config, logger)
 		if err != nil {
-			log.Fatal("Failed to create components: %v", err)
+			logger.Error("Failed to create components: %v", err)
+			os.Exit(1)
 		}
 		defer altStore.Close()
 	*/
@@ -93,25 +102,26 @@ func main() {
 	// Alternatively, use the high-level Server API (but don't start it)
 	/*
 		config := projectmemory.DefaultConfig()
-		pmServer, err := projectmemory.NewServer(config)
+		pmServer, err := projectmemory.NewServer(config, logger)
 		if err != nil {
-			log.Fatal("Failed to create ProjectMemory server: %v", err)
+			logger.Error("Failed to create ProjectMemory server: %v", err)
+			os.Exit(1)
 		}
 
 		// You can use the high-level methods
 		id, err := pmServer.SaveContext("This is a test context from the high-level API")
 		if err != nil {
-			log.Error("Failed to save context: %v", err)
+			logger.Error("Failed to save context: %v", err)
 		} else {
-			log.Info("Saved context with ID: %s", id)
+			logger.Info("Saved context with ID: %s", id)
 
 			// And retrieve it
-			results, err := pmServer.RetrieveContext("test context", 5)
+			results, err := pmServer.RetrieveContext("test query", 5)
 			if err != nil {
-				log.Error("Failed to retrieve context: %v", err)
+				logger.Error("Failed to retrieve context: %v", err)
 			} else {
 				for i, result := range results {
-					log.Info("Result %d: %s", i+1, result)
+					logger.Info("Result %d: %s", i+1, result)
 				}
 			}
 		}
@@ -127,13 +137,16 @@ func main() {
 	// ====================================================================
 
 	// Create your own MCP server
-	mcpServer := gomcp.NewServer("combined-mcp-server").
-		// Register your own tools
-		Tool("your_custom_tool", "Description of your custom tool",
-			func(ctx *gomcpserver.Context, req YourCustomRequest) (YourCustomResponse, error) {
-				// Your tool implementation
-				return YourCustomResponse{}, nil
-			})
+	mcpServer := gomcp.NewServer("combined-mcp-server")
+	// Set the logger for the MCP server
+	mcpServer.WithLogger(logger)
+
+	// Register your own tools
+	mcpServer = mcpServer.Tool("your_custom_tool", "Description of your custom tool",
+		func(ctx *gomcpserver.Context, req YourCustomRequest) (YourCustomResponse, error) {
+			// Your tool implementation
+			return YourCustomResponse{}, nil
+		})
 
 	// We need a different approach since the handleSaveContext and handleRetrieveContext
 	// methods are not publicly exposed. Instead, we'll use the components directly.
@@ -146,16 +159,20 @@ func main() {
 			}
 
 			// Generate summary using our summarizer
+			logger.Debug("Generating summary for text (length: %d)", len(req.ContextText))
 			summary, err := summ.Summarize(req.ContextText)
 			if err != nil {
+				logger.Error("Failed to summarize text: %v", err)
 				response.Status = "error"
 				response.Error = err.Error()
 				return response, nil
 			}
 
 			// Create embedding
+			logger.Debug("Creating embedding for summary")
 			embedding, err := emb.CreateEmbedding(summary)
 			if err != nil {
+				logger.Error("Failed to create embedding: %v", err)
 				response.Status = "error"
 				response.Error = err.Error()
 				return response, nil
@@ -164,20 +181,24 @@ func main() {
 			// Convert embedding to bytes
 			embeddingBytes, err := vector.Float32SliceToBytes(embedding)
 			if err != nil {
+				logger.Error("Failed to convert embedding to bytes: %v", err)
 				response.Status = "error"
 				response.Error = err.Error()
 				return response, nil
 			}
 
 			// Store in context store
-			id := projectmemory.GenerateHash(summary, time.Now().UnixNano())
+			id := util.GenerateHash(summary, time.Now().UnixNano())
+			logger.Debug("Storing context with ID: %s", id)
 			err = store.Store(id, summary, embeddingBytes, time.Now())
 			if err != nil {
+				logger.Error("Failed to store context: %v", err)
 				response.Status = "error"
 				response.Error = err.Error()
 				return response, nil
 			}
 
+			logger.Info("Successfully saved context with ID: %s", id)
 			response.ID = id
 			return response, nil
 		})
@@ -190,8 +211,10 @@ func main() {
 			}
 
 			// Create embedding for query
+			logger.Debug("Creating embedding for query: %s", req.Query)
 			queryEmbedding, err := emb.CreateEmbedding(req.Query)
 			if err != nil {
+				logger.Error("Failed to create embedding for query: %v", err)
 				response.Status = "error"
 				response.Error = err.Error()
 				return response, nil
@@ -201,22 +224,26 @@ func main() {
 			limit := req.Limit
 			if limit <= 0 {
 				limit = tools.DefaultRetrieveLimit
+				logger.Debug("Using default limit: %d", limit)
 			}
 
 			// Search context store
+			logger.Debug("Searching context store with limit: %d", limit)
 			results, err := store.Search(queryEmbedding, limit)
 			if err != nil {
+				logger.Error("Failed to search context store: %v", err)
 				response.Status = "error"
 				response.Error = err.Error()
 				return response, nil
 			}
 
+			logger.Info("Retrieved %d context results", len(results))
 			response.Results = results
 			return response, nil
 		})
 
 	// Start your combined MCP server
-	log.Info("Starting combined MCP server with ProjectMemory tools...")
+	logger.Info("Starting combined MCP server with ProjectMemory tools...")
 	mcpServer.AsStdio().Run()
 }
 

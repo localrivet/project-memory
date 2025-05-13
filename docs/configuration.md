@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Project-Memory uses a JSON configuration file to customize its behavior. This document provides a detailed reference for all available configuration options.
+Project-Memory uses a JSON configuration file to customize its behavior. The configuration can be loaded from a file or set programmatically. You can also override certain settings using environment variables.
 
 ## Configuration File
 
@@ -10,144 +10,140 @@ The configuration file should be named `.projectmemoryconfig` and placed in the 
 
 ```json
 {
-  "models": {
-    "provider": "mock",
-    "modelId": "mock-model",
-    "maxTokens": 1024,
-    "temperature": 0.7
+  "store": {
+    "sqlite_path": ".projectmemory.db"
   },
-  "database": {
-    "path": ".projectmemory.db"
+  "summarizer": {
+    "provider": "basic"
+  },
+  "embedder": {
+    "provider": "mock",
+    "dimensions": 768
   },
   "logging": {
-    "level": "INFO",
-    "format": "TEXT"
+    "level": "info",
+    "format": "text"
   }
 }
 ```
 
 ## Configuration Sections
 
-### Models Section
+### Store Section
 
-The `models` section configures the AI model used for summarization:
+The `store` section configures the data storage:
 
-| Option        | Type    | Description                                                   | Default      |
-| ------------- | ------- | ------------------------------------------------------------- | ------------ |
-| `provider`    | string  | The AI provider to use (mock, anthropic, openai, google, xai) | "mock"       |
-| `modelId`     | string  | The specific model ID to use                                  | "mock-model" |
-| `maxTokens`   | integer | Maximum number of tokens for model responses                  | 1024         |
-| `temperature` | float   | Creativity level (0.0-1.0)                                    | 0.7          |
+| Option        | Type   | Description                      | Environment Variable | Default             | Validation |
+| ------------- | ------ | -------------------------------- | -------------------- | ------------------- | ---------- |
+| `sqlite_path` | string | Path to the SQLite database file | `SQLITE_PATH`        | ".projectmemory.db" | `required` |
 
-For example, to use Anthropic's Claude:
+### Summarizer Section
 
-```json
-"models": {
-  "provider": "anthropic",
-  "modelId": "claude-3-opus-20240229",
-  "maxTokens": 4096,
-  "temperature": 0.2
-}
-```
+The `summarizer` section configures the text summarization:
 
-### Summarizer Section (Optional)
+| Option     | Type   | Description                            | Environment Variable  | Default |
+| ---------- | ------ | -------------------------------------- | --------------------- | ------- |
+| `provider` | string | The summarization provider to use      | `SUMMARIZER_PROVIDER` | "basic" |
+| `api_key`  | string | API key for the summarization provider | `SUMMARIZER_API_KEY`  | ""      |
 
-The `summarizer` section provides additional configuration for text summarization:
+### Embedder Section
 
-| Option              | Type    | Description                                 | Default                 |
-| ------------------- | ------- | ------------------------------------------- | ----------------------- |
-| `provider`          | string  | AI provider for summarization               | Same as models.provider |
-| `modelId`           | string  | Model for summarization                     | Same as models.modelId  |
-| `maxSummaryLength`  | integer | Maximum length of generated summaries       | 500                     |
-| `preserveKeyTerms`  | boolean | Whether to preserve key terms in summaries  | true                    |
-| `fallbackProviders` | array   | List of fallback providers if primary fails | []                      |
+The `embedder` section configures the embedding generation:
 
-Example:
-
-```json
-"summarizer": {
-  "provider": "anthropic",
-  "modelId": "claude-3-opus-20240229",
-  "maxSummaryLength": 500,
-  "preserveKeyTerms": true,
-  "fallbackProviders": [
-    {
-      "provider": "openai",
-      "modelId": "gpt-4o"
-    },
-    {
-      "provider": "google",
-      "modelId": "gemini-1.5-pro"
-    }
-  ]
-}
-```
-
-### Database Section
-
-The `database` section configures the SQLite database:
-
-| Option | Type   | Description                      | Default             |
-| ------ | ------ | -------------------------------- | ------------------- |
-| `path` | string | Path to the SQLite database file | ".projectmemory.db" |
+| Option       | Type    | Description                        | Environment Variable  | Default | Validation |
+| ------------ | ------- | ---------------------------------- | --------------------- | ------- | ---------- |
+| `provider`   | string  | The embedding provider to use      | `EMBEDDER_PROVIDER`   | "mock"  |            |
+| `dimensions` | integer | Dimensions for the embeddings      | `EMBEDDER_DIMENSIONS` | 768     | `min:1`    |
+| `api_key`    | string  | API key for the embedding provider | `EMBEDDER_API_KEY`    | ""      |            |
 
 ### Logging Section
 
 The `logging` section configures the logging system:
 
-| Option   | Type   | Description                                 | Default |
-| -------- | ------ | ------------------------------------------- | ------- |
-| `level`  | string | Log level (DEBUG, INFO, WARN, ERROR, FATAL) | "INFO"  |
-| `format` | string | Log format (TEXT, JSON)                     | "TEXT"  |
-
-### API Keys Section (Optional)
-
-The `apiKeys` section stores API keys for various providers. It's recommended to use environment variables instead for security reasons:
-
-```json
-"apiKeys": {
-  "anthropic": "${ANTHROPIC_API_KEY}",
-  "openai": "${OPENAI_API_KEY}",
-  "google": "${GOOGLE_API_KEY}",
-  "xai": "${XAI_API_KEY}"
-}
-```
-
-### Cache Section (Optional)
-
-The `cache` section configures caching behavior:
-
-| Option     | Type    | Description                    | Default |
-| ---------- | ------- | ------------------------------ | ------- |
-| `enabled`  | boolean | Whether caching is enabled     | true    |
-| `ttl`      | integer | Time-to-live in seconds        | 86400   |
-| `capacity` | integer | Maximum number of cached items | 1000    |
-
-### Retry Section (Optional)
-
-The `retry` section configures request retry behavior:
-
-| Option         | Type    | Description                      | Default |
-| -------------- | ------- | -------------------------------- | ------- |
-| `maxRetries`   | integer | Maximum number of retry attempts | 3       |
-| `initialDelay` | integer | Initial delay in milliseconds    | 1000    |
-| `maxDelay`     | integer | Maximum delay in milliseconds    | 10000   |
+| Option   | Type   | Description                          | Environment Variable | Default | Validation |
+| -------- | ------ | ------------------------------------ | -------------------- | ------- | ---------- |
+| `level`  | string | Log level (debug, info, warn, error) | `LOG_LEVEL`          | "info"  | `required` |
+| `format` | string | Log format (text, json)              | `LOG_FORMAT`         | "text"  |            |
 
 ## Environment Variables
 
-Some configuration options can be overridden using environment variables:
+Configuration options can be overridden using environment variables. The environment variables take precedence over values specified in the configuration file. The naming convention for environment variables is to use uppercase with underscores.
 
-| Environment Variable | Description                |
-| -------------------- | -------------------------- |
-| `LOG_LEVEL`          | Override the logging level |
-| `ANTHROPIC_API_KEY`  | API key for Anthropic      |
-| `OPENAI_API_KEY`     | API key for OpenAI         |
-| `GOOGLE_API_KEY`     | API key for Google AI      |
-| `XAI_API_KEY`        | API key for XAI            |
+ProjectMemory uses the `github.com/localrivet/configurator` library which supports a flexible environment variable resolution system. Environment variables are checked using the following formats:
+
+1. `PROJECTMEMORY_SECTION_OPTION` (e.g., `PROJECTMEMORY_STORE_SQLITE_PATH`)
+2. Direct mapping via tag (e.g., `SQLITE_PATH` as specified in the `env:` tag)
+
+### Core Environment Variables
+
+| Environment Variable                | Alt Environment Variable | Configuration Path  | Description                        |
+| ----------------------------------- | ------------------------ | ------------------- | ---------------------------------- |
+| `PROJECTMEMORY_STORE_SQLITE_PATH`   | `SQLITE_PATH`            | store.sqlite_path   | Path to the SQLite database        |
+| `PROJECTMEMORY_SUMMARIZER_PROVIDER` | `SUMMARIZER_PROVIDER`    | summarizer.provider | The summarization provider         |
+| `PROJECTMEMORY_SUMMARIZER_API_KEY`  | `SUMMARIZER_API_KEY`     | summarizer.api_key  | API key for summarization provider |
+| `PROJECTMEMORY_EMBEDDER_PROVIDER`   | `EMBEDDER_PROVIDER`      | embedder.provider   | The embedding provider             |
+| `PROJECTMEMORY_EMBEDDER_DIMENSIONS` | `EMBEDDER_DIMENSIONS`    | embedder.dimensions | Dimensions for embeddings          |
+| `PROJECTMEMORY_EMBEDDER_API_KEY`    | `EMBEDDER_API_KEY`       | embedder.api_key    | API key for embedding provider     |
+| `PROJECTMEMORY_LOGGING_LEVEL`       | `LOG_LEVEL`              | logging.level       | Log level                          |
+| `PROJECTMEMORY_LOGGING_FORMAT`      | `LOG_FORMAT`             | logging.format      | Log format                         |
+
+## Using the Configuration Package
+
+ProjectMemory includes a configuration package that makes it easy to load, validate, and save configuration. This package is based on the `github.com/localrivet/configurator` library and provides additional functionality like environment variable support and validation.
+
+### Loading Configuration
+
+```go
+import "github.com/localrivet/projectmemory"
+
+// Load from default path
+cfg, err := projectmemory.DefaultConfig()
+if err != nil {
+    // Handle error
+}
+
+// Load from custom path
+cfg, err := projectmemory.LoadConfigWithPath("/path/to/config")
+if err != nil {
+    // Handle error
+}
+```
+
+### Getting Default Configuration
+
+```go
+// Create a new configuration with default values
+cfg := projectmemory.DefaultConfig()
+```
+
+### Saving Configuration
+
+```go
+// Save to the path it was loaded from
+err := cfg.Save()
+if err != nil {
+    // Handle error
+}
+
+// Save to a specific path
+err := cfg.SaveToFile("/path/to/config")
+if err != nil {
+    // Handle error
+}
+```
+
+## Validation
+
+The configuration system includes validation to ensure required fields are present and values are within expected ranges:
+
+- `required`: Field must have a non-empty value
+- `min:X`: Numeric field must be at least X (e.g., `min:1` for dimensions)
+
+If validation fails, the configuration loading process will return an error with details about which fields failed validation.
 
 ## Configuration Best Practices
 
-1. **Security**: Don't commit API keys in the config file; use environment variables
+1. **Security**: Don't commit API keys in the config file; use environment variables instead
 2. **Development**: Use the mock provider during development to avoid API costs
-3. **Tuning**: Adjust maxSummaryLength based on your use case and token usage
-4. **Logging**: Use INFO level in production; DEBUG for development
+3. **Logging**: Use "info" level in production, "debug" for development
+4. **Configuration Management**: Create a configuration file with your application's defaults and allow users to override specific options as needed

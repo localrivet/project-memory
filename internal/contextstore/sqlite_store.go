@@ -189,8 +189,8 @@ func (s *SQLiteContextStore) Search(queryEmbedding []float32, limit int) ([]stri
 	return topSummaries, nil
 }
 
-// DeleteContext deletes a specific context entry from the store by ID.
-func (s *SQLiteContextStore) DeleteContext(id string) error {
+// Delete deletes a specific context entry from the store by ID.
+func (s *SQLiteContextStore) Delete(id string) error {
 	deleteSQL := `DELETE FROM context_memory WHERE id = ?;`
 
 	stmt, err := s.conn.Prepare(deleteSQL)
@@ -199,7 +199,7 @@ func (s *SQLiteContextStore) DeleteContext(id string) error {
 	}
 	defer stmt.Reset()
 
-	// Bind the ID parameter
+	// Bind parameter
 	stmt.BindText(1, id)
 
 	// Execute the statement
@@ -208,31 +208,57 @@ func (s *SQLiteContextStore) DeleteContext(id string) error {
 		return fmt.Errorf("failed to delete context entry: %w", err)
 	}
 
+	// Check if any rows were affected
+	changes := s.conn.Changes()
+	if changes == 0 {
+		return fmt.Errorf("no context entry found with ID: %s", id)
+	}
+
 	return nil
 }
 
-// ClearAllContext removes all context entries from the store.
-func (s *SQLiteContextStore) ClearAllContext() error {
-	clearSQL := `DELETE FROM context_memory;`
+// Clear removes all context entries from the store.
+// Returns the number of entries that were deleted.
+func (s *SQLiteContextStore) Clear() (int, error) {
+	deleteSQL := `DELETE FROM context_memory;`
 
-	stmt, err := s.conn.Prepare(clearSQL)
+	stmt, err := s.conn.Prepare(deleteSQL)
 	if err != nil {
-		return fmt.Errorf("failed to prepare clear statement: %w", err)
+		return 0, fmt.Errorf("failed to prepare delete all statement: %w", err)
 	}
 	defer stmt.Reset()
 
 	// Execute the statement
 	_, err = stmt.Step()
 	if err != nil {
-		return fmt.Errorf("failed to clear context entries: %w", err)
+		return 0, fmt.Errorf("failed to delete all context entries: %w", err)
 	}
 
-	return nil
+	// Get the number of rows affected
+	changes := s.conn.Changes()
+	return changes, nil
 }
 
-// ReplaceContext replaces a context entry with updated information.
-// Note: This is similar to Store with INSERT OR REPLACE, but makes the intent clearer.
-func (s *SQLiteContextStore) ReplaceContext(id string, summaryText string, embedding []byte, timestamp time.Time) error {
-	// Implementation is identical to Store since we're using INSERT OR REPLACE
+// Replace replaces a context entry with updated information.
+func (s *SQLiteContextStore) Replace(id string, summaryText string, embedding []byte, timestamp time.Time) error {
+	// First check if the entry exists
+	checkSQL := `SELECT id FROM context_memory WHERE id = ?;`
+
+	checkStmt, err := s.conn.Prepare(checkSQL)
+	if err != nil {
+		return fmt.Errorf("failed to prepare check statement: %w", err)
+	}
+	checkStmt.BindText(1, id)
+
+	hasRow, err := checkStmt.Step()
+	checkStmt.Reset()
+	if err != nil {
+		return fmt.Errorf("failed to check for context entry: %w", err)
+	}
+	if !hasRow {
+		return fmt.Errorf("no context entry found with ID: %s", id)
+	}
+
+	// Then perform the update
 	return s.Store(id, summaryText, embedding, timestamp)
 }

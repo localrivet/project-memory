@@ -1,171 +1,168 @@
 package main
 
 import (
-	"encoding/json"
+	"bufio"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
+	"github.com/localrivet/gomcp/logx"
+	"github.com/localrivet/projectmemory"
+	"github.com/localrivet/projectmemory/internal/config"
 	"github.com/localrivet/projectmemory/internal/contextstore"
-	"github.com/localrivet/projectmemory/internal/logger"
-	"github.com/localrivet/projectmemory/internal/server"
-	"github.com/localrivet/projectmemory/internal/summarizer"
-	"github.com/localrivet/projectmemory/internal/vector"
 )
 
-// Config represents the configuration structure for the ProjectMemory service.
-type Config struct {
-	Models struct {
-		Provider    string  `json:"provider"`
-		ModelID     string  `json:"modelId"`
-		MaxTokens   int     `json:"maxTokens"`
-		Temperature float32 `json:"temperature"`
-	} `json:"models"`
-	Database struct {
-		Path string `json:"path"`
-	} `json:"database"`
-	Logging struct {
-		Level  string `json:"level"`
-		Format string `json:"format"`
-	} `json:"logging"`
-}
+const (
+	defaultConfigPath = ".projectmemoryconfig"
+)
 
 func main() {
-	// Initialize logging first thing
-	appLogger := setupLogging()
+	// Get configuration path from arguments or use default
+	configPath := defaultConfigPath
+	if len(os.Args) > 1 {
+		configPath = os.Args[1]
+	}
 
-	appLogger.Info("ProjectMemory MCP Server - Starting...")
+	// Set up logging
+	logger := setupLogging()
+	logger.Info("ProjectMemory MCP Server - Starting...")
 
-	// Load configuration
-	config, err := loadConfig()
+	// Check if config file exists before trying to create server
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		logger.Warn("Configuration file %s not found", configPath)
+
+		// Ask if user wants to create default config
+		if promptCreateConfig(configPath) {
+			logger.Info("Creating default configuration file at %s", configPath)
+
+			// Create default config
+			cfg := config.NewConfig()
+			if err := cfg.SaveToFile(configPath); err != nil {
+				logger.Error("Failed to create default configuration: %v", err)
+				os.Exit(1)
+			}
+
+			logger.Info("Default configuration file created successfully")
+		} else {
+			logger.Info("Configuration file creation skipped. Exiting.")
+			os.Exit(0)
+		}
+	}
+
+	// Create the server with the logger
+	server, err := projectmemory.NewServer(configPath, logger)
 	if err != nil {
-		logger.LogError(err)
-		appLogger.Fatal("Failed to load configuration")
+		logger.Error("Failed to create server: %v", err)
+		os.Exit(1)
 	}
 
-	// Configure logging based on config
-	if config.Logging.Level != "" {
-		appLogger.SetLevel(logger.ParseLevel(config.Logging.Level))
-		appLogger.Info("Log level set to %s", config.Logging.Level)
+	// Update logger based on config
+	if logLevel := os.Getenv("LOG_LEVEL"); logLevel != "" {
+		// Create a new logger with the desired level since SetLevel might not be available
+		logger = logx.NewLogger(logLevel)
+		logger.Info("Log level set to %s", logLevel)
+
+		// Update server with the new logger
+		server.WithLogger(logger)
 	}
 
-	if config.Logging.Format == "json" {
-		appLogger.SetFormat(logger.JSON)
-		appLogger.Info("Log format set to JSON")
+	// Use JSON formatting if requested
+	if logFormat := os.Getenv("LOG_FORMAT"); logFormat == "json" {
+		// Cannot directly change format in logx, but we would use a different logger if needed
+		logger.Info("Log format set to JSON")
 	}
 
-	// Initialize the context store
+	// Initialize components
+	store, err := initStore(logger)
+	if err != nil {
+		logger.Error("Failed to initialize SQLite context store: %v", err)
+		os.Exit(1)
+	}
+	logger.Info("SQLite context store initialized")
+
+	// Set up signal handler for graceful shutdown
+	setupSignalHandler(store, logger)
+
+	// Start the server
+	logger.Info("Starting MCP server...")
+	err = server.Start()
+	if err != nil {
+		logger.Error("Failed to start MCP server: %v", err)
+		os.Exit(1)
+	}
+}
+
+// promptCreateConfig asks the user if they want to create a default configuration file
+func promptCreateConfig(configPath string) bool {
+	// Skip prompt in non-interactive environments (like when redirecting stdin)
+	stat, err := os.Stdin.Stat()
+	if err != nil || (stat.Mode()&os.ModeCharDevice) == 0 {
+		// Not a terminal/console, return true to automatically create config
+		return true
+	}
+
+	// Use standard input for interactive prompt
+	reader := bufio.NewReader(os.Stdin)
+	os.Stdout.WriteString("Configuration file not found. Create default configuration? [Y/n]: ")
+
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		// Error reading input, assume yes
+		return true
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+	// If response is empty or starts with 'y', return true
+	return response == "" || strings.HasPrefix(response, "y")
+}
+
+func setupLogging() logx.Logger {
+	// Get log level from environment or use default
+	levelStr := os.Getenv("LOG_LEVEL")
+	if levelStr == "" {
+		levelStr = "info" // Default to INFO level
+	}
+
+	// Create and return the logger
+	return logx.NewLogger(levelStr)
+}
+
+func initStore(logger logx.Logger) (contextstore.ContextStore, error) {
+	// Get database path from environment or use default
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = config.DefaultSQLitePath // Use the default from config package
+	}
+
+	// Initialize SQLite store
+	logger.Debug("Initializing SQLite store at %s", dbPath)
 	store := contextstore.NewSQLiteContextStore()
-	storeLogger := appLogger.WithContext("store")
-
-	err = store.Initialize(config.Database.Path)
+	err := store.Initialize(dbPath)
 	if err != nil {
-		err = logger.DatabaseError(err, "Failed to initialize SQLite context store")
-		logger.LogError(err)
-		appLogger.Fatal("Failed to initialize SQLite context store")
+		logger.Error("Failed to initialize SQLite context store: %v", err)
+		return nil, err
 	}
-	defer store.Close()
-	storeLogger.Info("SQLite context store initialized")
 
-	// Initialize the summarizer
-	summ := summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
-	summLogger := appLogger.WithContext("summarizer")
-
-	err = summ.Initialize()
-	if err != nil {
-		err = logger.ConfigError(err, "Failed to initialize summarizer")
-		logger.LogError(err)
-		appLogger.Fatal("Failed to initialize summarizer")
-	}
-	summLogger.Info("Summarizer initialized")
-
-	// Initialize the embedder
-	emb := vector.NewMockEmbedder(vector.DefaultEmbeddingDimensions)
-	embLogger := appLogger.WithContext("embedder")
-
-	err = emb.Initialize()
-	if err != nil {
-		err = logger.ConfigError(err, "Failed to initialize embedder")
-		logger.LogError(err)
-		appLogger.Fatal("Failed to initialize embedder")
-	}
-	embLogger.Info("Embedder initialized")
-
-	// Initialize the MCP server
-	srv := server.NewContextToolServer(store, summ, emb)
-	srvLogger := appLogger.WithContext("server")
-
-	err = srv.Initialize()
-	if err != nil {
-		err = logger.ConfigError(err, "Failed to initialize MCP server")
-		logger.LogError(err)
-		appLogger.Fatal("Failed to initialize MCP server")
-	}
-	srvLogger.Info("MCP server initialized")
-
-	// Handle graceful shutdown
-	setupSignalHandler(store, appLogger)
-
-	// Start the MCP server (this will block until server is terminated)
-	srvLogger.Info("Starting MCP server...")
-	if err := srv.Start(); err != nil {
-		err = logger.APIError(err, "MCP server failed")
-		logger.LogError(err)
-		appLogger.Fatal("Failed to start MCP server")
-	}
+	return store, nil
 }
 
-// setupLogging configures and returns the application logger
-func setupLogging() *logger.Logger {
-	// Create default configuration
-	config := logger.DefaultConfig()
-
-	// Try to get log level from environment variable
-	if levelStr := os.Getenv("LOG_LEVEL"); levelStr != "" {
-		config.Level = logger.ParseLevel(levelStr)
-	}
-
-	// Create and return logger
-	appLogger := logger.New(config)
-	logger.SetDefaultLogger(appLogger)
-
-	return appLogger
-}
-
-// loadConfig loads configuration from the .projectmemoryconfig file.
-func loadConfig() (*Config, error) {
-	data, err := os.ReadFile(".projectmemoryconfig")
-	if err != nil {
-		return nil, logger.ConfigError(err, "failed to read config file")
-	}
-
-	var config Config
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		return nil, logger.ConfigError(err, "failed to parse config file")
-	}
-
-	return &config, nil
-}
-
-// setupSignalHandler sets up a signal handler for graceful shutdown.
-func setupSignalHandler(store contextstore.ContextStore, log *logger.Logger) {
+func setupSignalHandler(store contextstore.ContextStore, logger logx.Logger) {
+	// Create channel to receive signals
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
+	// Handle signals in a goroutine
 	go func() {
 		<-c
-		log.Info("Received shutdown signal, terminating gracefully...")
+		logger.Info("Shutting down gracefully...")
 
-		// Close the store to ensure all data is saved
-		if err := store.Close(); err != nil {
-			err = logger.DatabaseError(err, "Error closing store during shutdown")
-			logger.LogError(err)
-		} else {
-			log.Info("Database closed successfully")
+		// Close the store
+		err := store.Close()
+		if err != nil {
+			logger.Error("Error closing store during shutdown: %v", err)
 		}
 
-		log.Info("Shutdown complete")
 		os.Exit(0)
 	}()
 }

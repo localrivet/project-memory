@@ -323,6 +323,75 @@ func main() {
    - Replacing outdated information with updated content
    - Considering a periodic cleanup strategy based on your application's needs
 
+## Custom Logging
+
+When embedding ProjectMemory in your application, you may want to integrate with your application's existing logging system. ProjectMemory provides two ways to customize logging:
+
+### Using the StandardLoggerAdapter
+
+The simplest approach is to use the `StandardLoggerAdapter` to adapt a standard Go logger:
+
+```go
+import (
+    "log"
+    "os"
+
+    "github.com/localrivet/projectmemory"
+)
+
+// Create your application's logger
+appLogger := log.New(os.Stderr, "[MyApp] ", log.LstdFlags)
+
+// Convert it to a ProjectMemory-compatible logger
+pmLogger := projectmemory.NewStandardLoggerAdapter(appLogger, "info", "text")
+
+// Create the server
+config := projectmemory.DefaultConfig()
+server, err := projectmemory.NewServer(config)
+if err != nil {
+    appLogger.Fatalf("Failed to create ProjectMemory server: %v", err)
+}
+
+// Set the custom logger
+server.WithLogger(pmLogger)
+
+// Now all ProjectMemory logs will go through your application's logger
+```
+
+### Logging to a File
+
+To direct ProjectMemory logs to a file:
+
+```go
+// Create a log file
+logFile, err := os.OpenFile("projectmemory.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+if err != nil {
+    log.Fatalf("Failed to open log file: %v", err)
+}
+defer logFile.Close()
+
+// Create a logger that writes to the file
+fileLogger := log.New(logFile, "", log.LstdFlags)
+
+// Adapt it for ProjectMemory
+pmLogger := projectmemory.NewStandardLoggerAdapter(fileLogger, "debug", "json")
+
+// Create the server and set the logger
+config := projectmemory.DefaultConfig()
+server, err := projectmemory.NewServer(config)
+if err != nil {
+    log.Fatalf("Failed to create ProjectMemory server: %v", err)
+}
+server.WithLogger(pmLogger)
+```
+
+### Important Notes
+
+1. Always call `WithLogger()` immediately after creating the server and before using any other methods.
+2. The logging level can be set to: "debug", "info", "warn", "error", or "fatal".
+3. The format can be "text" (default) or "json".
+4. When using JSON format, logs are structured and can be easily parsed by log management tools.
+
 ## Complete Example
 
 See the [embed-in-mcp example](../examples/embed-in-mcp/main.go) for a complete working example of integrating ProjectMemory with an existing MCP server.

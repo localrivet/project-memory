@@ -1,293 +1,346 @@
 package projectmemory
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"time"
 
+	"github.com/localrivet/gomcp/logx"
+	"github.com/localrivet/projectmemory/internal/config"
 	"github.com/localrivet/projectmemory/internal/contextstore"
-	"github.com/localrivet/projectmemory/internal/logger"
+	"github.com/localrivet/projectmemory/internal/errortypes"
 	"github.com/localrivet/projectmemory/internal/server"
 	"github.com/localrivet/projectmemory/internal/summarizer"
-	"github.com/localrivet/projectmemory/internal/tools"
+	"github.com/localrivet/projectmemory/internal/util"
 	"github.com/localrivet/projectmemory/internal/vector"
 )
 
-// Config represents the configuration structure for the ProjectMemory service.
-type Config struct {
-	Models struct {
-		Provider    string  `json:"provider"`
-		ModelID     string  `json:"modelId"`
-		MaxTokens   int     `json:"maxTokens"`
-		Temperature float32 `json:"temperature"`
-	} `json:"models"`
-	Database struct {
-		Path string `json:"path"`
-	} `json:"database"`
-	Logging struct {
-		Level  string `json:"level"`
-		Format string `json:"format"`
-	} `json:"logging"`
-}
+// Config represents the configuration for the ProjectMemory service.
+type Config = config.Config
 
-// DefaultConfig returns a configuration with sensible defaults
-func DefaultConfig() *Config {
-	config := &Config{}
-	config.Models.Provider = "mock"
-	config.Models.ModelID = "mock-model"
-	config.Models.MaxTokens = 1024
-	config.Models.Temperature = 0.7
-	config.Database.Path = ".projectmemory.db"
-	config.Logging.Level = "INFO"
-	config.Logging.Format = "TEXT"
-	return config
-}
-
-// Server represents a ProjectMemory server instance
+// Server represents the ProjectMemory service.
 type Server struct {
-	toolServer server.ContextToolServer
+	config     *config.Config
 	store      contextstore.ContextStore
 	summarizer summarizer.Summarizer
 	embedder   vector.Embedder
-	logger     *logger.Logger
+	toolServer server.ContextToolServer
+	logger     logx.Logger
 }
 
-// NewServer creates a new ProjectMemory server with the provided configuration
-func NewServer(config *Config) (*Server, error) {
-	// Initialize logging
-	loggerConfig := logger.DefaultConfig()
-	if config.Logging.Level != "" {
-		loggerConfig.Level = logger.ParseLevel(config.Logging.Level)
-	}
-	if config.Logging.Format == "json" {
-		loggerConfig.Format = logger.JSON
+// NewServer creates a new ProjectMemory Server with the given configuration path and logger.
+func NewServer(configPath string, logger logx.Logger) (*Server, error) {
+	// Use provided logger or create a default one
+	if logger == nil {
+		logger = logx.NewLogger("info")
 	}
 
-	appLogger := logger.New(loggerConfig)
-	logger.SetDefaultLogger(appLogger)
+	// Load configuration
+	logger.Debug("Loading configuration from %s", configPath)
+	cfg, err := config.LoadConfigWithPath(configPath)
+	if err != nil {
+		logger.Error("Failed to load configuration: %v", err)
+		return nil, errortypes.ConfigError(err, "Failed to load configuration")
+	}
 
-	// Initialize context store
+	// Initialize SQLite context store
+	logger.Debug("Initializing SQLite context store at %s", cfg.Store.SQLitePath)
 	store := contextstore.NewSQLiteContextStore()
-	if err := store.Initialize(config.Database.Path); err != nil {
-		return nil, logger.DatabaseError(err, "Failed to initialize SQLite context store")
+	err = store.Initialize(cfg.Store.SQLitePath)
+	if err != nil {
+		logger.Error("Failed to initialize SQLite context store: %v", err)
+		return nil, errortypes.DatabaseError(err, "Failed to initialize SQLite context store")
 	}
 
 	// Initialize summarizer
-	summ := summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
-	if err := summ.Initialize(); err != nil {
-		return nil, logger.ConfigError(err, "Failed to initialize summarizer")
+	logger.Debug("Initializing summarizer with provider: %s", cfg.Summarizer.Provider)
+	var sum summarizer.Summarizer
+	switch cfg.Summarizer.Provider {
+	case "basic", "":
+		sum = summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
+	default:
+		logger.Warn("Unknown summarizer provider: %s, using basic summarizer", cfg.Summarizer.Provider)
+		sum = summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
+	}
+
+	if err := sum.Initialize(); err != nil {
+		logger.Error("Failed to initialize summarizer: %v", err)
+		return nil, errortypes.ConfigError(err, "Failed to initialize summarizer")
 	}
 
 	// Initialize embedder
-	emb := vector.NewMockEmbedder(vector.DefaultEmbeddingDimensions)
+	logger.Debug("Initializing embedder with provider: %s, dimensions: %d", cfg.Embedder.Provider, cfg.Embedder.Dimensions)
+	var emb vector.Embedder
+	dimensions := cfg.Embedder.Dimensions
+	if dimensions <= 0 {
+		dimensions = vector.DefaultEmbeddingDimensions
+	}
+
+	switch cfg.Embedder.Provider {
+	case "mock", "":
+		emb = vector.NewMockEmbedder(dimensions)
+	default:
+		logger.Warn("Unknown embedder provider: %s, using mock embedder", cfg.Embedder.Provider)
+		emb = vector.NewMockEmbedder(dimensions)
+	}
+
 	if err := emb.Initialize(); err != nil {
-		return nil, logger.ConfigError(err, "Failed to initialize embedder")
+		logger.Error("Failed to initialize embedder: %v", err)
+		return nil, errortypes.ConfigError(err, "Failed to initialize embedder")
 	}
 
-	// Initialize server
-	srv := server.NewContextToolServer(store, summ, emb)
-	if err := srv.Initialize(); err != nil {
-		return nil, logger.ConfigError(err, "Failed to initialize MCP server")
+	// Create the MCP server
+	logger.Debug("Initializing context tool server")
+	mcpServer := server.NewContextToolServer(store, sum, emb)
+	// Pass the logger to the context tool server
+	mcpServer.WithLogger(logger)
+
+	err = mcpServer.Initialize()
+	if err != nil {
+		logger.Error("Failed to initialize MCP server: %v", err)
+		return nil, errortypes.ConfigError(err, "Failed to initialize MCP server")
 	}
 
+	logger.Info("ProjectMemory server successfully initialized")
 	return &Server{
-		toolServer: srv,
+		config:     cfg,
 		store:      store,
-		summarizer: summ,
+		summarizer: sum,
 		embedder:   emb,
-		logger:     appLogger,
+		toolServer: mcpServer,
+		logger:     logger,
 	}, nil
 }
 
-// Start starts the ProjectMemory server
+// DefaultConfig returns the default configuration for the ProjectMemory service.
+func DefaultConfig() *Config {
+	config := &Config{}
+	config.Store.SQLitePath = ".projectmemory.db"
+	config.Summarizer.Provider = "basic"
+	config.Embedder.Provider = "mock"
+	config.Embedder.Dimensions = vector.DefaultEmbeddingDimensions
+	config.Logging.Level = "info"
+	config.Logging.Format = "text"
+	return config
+}
+
+// SaveConfig saves the configuration to a file and returns the JSON content.
+func SaveConfig(config *Config, path string) ([]byte, error) {
+	// Pretty-print the JSON for better readability
+	content, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return nil, errortypes.ConfigError(err, "failed to marshal configuration")
+	}
+
+	return content, nil
+}
+
+// loadConfig loads the configuration from the given path.
+func loadConfig(configPath string) (*Config, error) {
+	// Read the config file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, errortypes.ConfigError(err, "failed to read config file")
+	}
+
+	// Parse the config file
+	config := &Config{}
+	err = json.Unmarshal(data, config)
+	if err != nil {
+		return nil, errortypes.ConfigError(err, "failed to parse config file")
+	}
+
+	return config, nil
+}
+
+// Start starts the ProjectMemory service.
 func (s *Server) Start() error {
+	s.logger.Info("Starting ProjectMemory service")
 	return s.toolServer.Start()
 }
 
-// Stop gracefully stops the ProjectMemory server
+// Stop stops the ProjectMemory service.
 func (s *Server) Stop() error {
-	if err := s.toolServer.Stop(); err != nil {
+	s.logger.Info("Stopping ProjectMemory service")
+	err := s.toolServer.Stop()
+	if err != nil {
 		return err
 	}
-	return s.store.Close()
-}
 
-// LoadConfig loads configuration from the specified file path
-func LoadConfig(filePath string) (*Config, error) {
-	data, err := os.ReadFile(filePath)
+	// Close the store
+	s.logger.Info("Closing store")
+	err = s.store.Close()
 	if err != nil {
-		return nil, logger.ConfigError(err, "failed to read config file")
+		s.logger.Error("Failed to close store: %v", err)
+		return err
 	}
 
-	var config Config
-	err = json.Unmarshal(data, &config)
-	if err != nil {
-		return nil, logger.ConfigError(err, "failed to parse config file")
-	}
-
-	return &config, nil
+	s.logger.Info("ProjectMemory service stopped")
+	return nil
 }
 
-// SaveContext saves a context text to the memory store
-func (s *Server) SaveContext(contextText string) (string, error) {
+// SaveContext saves the given text to the context store.
+func (s *Server) SaveContext(text string) (string, error) {
 	// Generate summary
-	summary, err := s.summarizer.Summarize(contextText)
+	s.logger.Debug("Generating summary of text (length: %d)", len(text))
+	summary, err := s.summarizer.Summarize(text)
 	if err != nil {
+		s.logger.Error("Failed to summarize text: %v", err)
 		return "", err
 	}
 
 	// Create embedding
+	s.logger.Debug("Creating embedding for summary")
 	embedding, err := s.embedder.CreateEmbedding(summary)
 	if err != nil {
+		s.logger.Error("Failed to create embedding: %v", err)
 		return "", err
 	}
 
 	// Convert embedding to bytes
 	embeddingBytes, err := vector.Float32SliceToBytes(embedding)
 	if err != nil {
+		s.logger.Error("Failed to convert embedding to bytes: %v", err)
 		return "", err
 	}
 
-	// Generate ID
-	id := GenerateHash(summary, time.Now().UnixNano())
+	// Generate ID (simple hash of content + timestamp)
+	timestamp := time.Now()
+	id := GenerateHash(summary, timestamp.UnixNano())
 
 	// Store in context store
-	err = s.store.Store(id, summary, embeddingBytes, time.Now())
+	s.logger.Debug("Storing context with ID: %s", id)
+	err = s.store.Store(id, summary, embeddingBytes, timestamp)
 	if err != nil {
+		s.logger.Error("Failed to store context: %v", err)
 		return "", err
 	}
 
+	s.logger.Info("Successfully saved context with ID: %s", id)
 	return id, nil
 }
 
-// RetrieveContext retrieves relevant context based on a query
+// RetrieveContext retrieves context entries similar to the given query.
 func (s *Server) RetrieveContext(query string, limit int) ([]string, error) {
-	// Set default limit if not specified
-	if limit <= 0 {
-		limit = tools.DefaultRetrieveLimit
-	}
-
 	// Create embedding for query
+	s.logger.Debug("Creating embedding for query: %s", query)
 	queryEmbedding, err := s.embedder.CreateEmbedding(query)
 	if err != nil {
+		s.logger.Error("Failed to create embedding for query: %v", err)
 		return nil, err
 	}
 
 	// Search context store
+	s.logger.Debug("Searching for similar context entries (limit: %d)", limit)
 	results, err := s.store.Search(queryEmbedding, limit)
 	if err != nil {
+		s.logger.Error("Failed to search context store: %v", err)
 		return nil, err
 	}
 
+	s.logger.Info("Retrieved %d context entries", len(results))
 	return results, nil
 }
 
-// DeleteContext deletes a specific context entry by ID
-func (s *Server) DeleteContext(id string) error {
-	if id == "" {
-		return fmt.Errorf("ID is required")
-	}
-
-	return s.store.DeleteContext(id)
-}
-
-// ClearAllContext removes all context entries from the store
-func (s *Server) ClearAllContext() error {
-	return s.store.ClearAllContext()
-}
-
-// ReplaceContext replaces an existing context with new content
-func (s *Server) ReplaceContext(id string, contextText string) (string, error) {
-	if id == "" {
-		return "", fmt.Errorf("ID is required")
-	}
-
-	if contextText == "" {
-		return "", fmt.Errorf("context text is required")
-	}
-
-	// Generate summary
-	summary, err := s.summarizer.Summarize(contextText)
-	if err != nil {
-		return "", err
-	}
-
-	// Create embedding
-	embedding, err := s.embedder.CreateEmbedding(summary)
-	if err != nil {
-		return "", err
-	}
-
-	// Convert embedding to bytes
-	embeddingBytes, err := vector.Float32SliceToBytes(embedding)
-	if err != nil {
-		return "", err
-	}
-
-	// Replace in context store
-	err = s.store.ReplaceContext(id, summary, embeddingBytes, time.Now())
-	if err != nil {
-		return "", err
-	}
-
-	return id, nil
-}
-
-// GetLogger returns the server's logger
-func (s *Server) GetLogger() *logger.Logger {
+// GetLogger returns the logger instance used by the server.
+func (s *Server) GetLogger() logx.Logger {
 	return s.logger
 }
 
-// GetStore returns the server's context store
+// GetStore returns the context store instance used by the server.
 func (s *Server) GetStore() contextstore.ContextStore {
 	return s.store
 }
 
-// GetSummarizer returns the server's summarizer
+// GetSummarizer returns the summarizer instance used by the server.
 func (s *Server) GetSummarizer() summarizer.Summarizer {
 	return s.summarizer
 }
 
-// GetEmbedder returns the server's embedder
+// GetEmbedder returns the embedder instance used by the server.
 func (s *Server) GetEmbedder() vector.Embedder {
 	return s.embedder
 }
 
-// CreateComponents creates and initializes the core components without starting the server.
-// This is useful when you want to use ProjectMemory components in your own MCP server.
-func CreateComponents(config *Config) (contextstore.ContextStore, summarizer.Summarizer, vector.Embedder, error) {
-	// Initialize context store
+// CreateComponents creates and initializes the components of the ProjectMemory service
+// without creating a server instance. This is useful for components that need
+// direct access to the store, summarizer, and embedder.
+func CreateComponents(cfg *config.Config, logger logx.Logger) (contextstore.ContextStore, summarizer.Summarizer, vector.Embedder, error) {
+	// Use provided logger or create a default one
+	if logger == nil {
+		logger = logx.NewLogger("info")
+	}
+
+	// Initialize SQLite context store
+	logger.Debug("Initializing SQLite context store at %s", cfg.Store.SQLitePath)
 	store := contextstore.NewSQLiteContextStore()
-	if err := store.Initialize(config.Database.Path); err != nil {
-		return nil, nil, nil, logger.DatabaseError(err, "Failed to initialize SQLite context store")
+	err := store.Initialize(cfg.Store.SQLitePath)
+	if err != nil {
+		logger.Error("Failed to initialize SQLite context store: %v", err)
+		return nil, nil, nil, errortypes.DatabaseError(err, "Failed to initialize SQLite context store")
 	}
 
 	// Initialize summarizer
-	summ := summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
-	if err := summ.Initialize(); err != nil {
-		return nil, nil, nil, logger.ConfigError(err, "Failed to initialize summarizer")
+	logger.Debug("Initializing summarizer with provider: %s", cfg.Summarizer.Provider)
+	var sum summarizer.Summarizer
+	switch cfg.Summarizer.Provider {
+	case "basic", "":
+		sum = summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
+	default:
+		logger.Warn("Unknown summarizer provider: %s, using basic summarizer", cfg.Summarizer.Provider)
+		sum = summarizer.NewBasicSummarizer(summarizer.DefaultMaxSummaryLength)
+	}
+
+	if err := sum.Initialize(); err != nil {
+		logger.Error("Failed to initialize summarizer: %v", err)
+		return nil, nil, nil, errortypes.ConfigError(err, "Failed to initialize summarizer")
 	}
 
 	// Initialize embedder
-	emb := vector.NewMockEmbedder(vector.DefaultEmbeddingDimensions)
-	if err := emb.Initialize(); err != nil {
-		return nil, nil, nil, logger.ConfigError(err, "Failed to initialize embedder")
+	logger.Debug("Initializing embedder with provider: %s, dimensions: %d", cfg.Embedder.Provider, cfg.Embedder.Dimensions)
+	var emb vector.Embedder
+	dimensions := cfg.Embedder.Dimensions
+	if dimensions <= 0 {
+		dimensions = vector.DefaultEmbeddingDimensions
 	}
 
-	return store, summ, emb, nil
+	switch cfg.Embedder.Provider {
+	case "mock", "":
+		emb = vector.NewMockEmbedder(dimensions)
+	default:
+		logger.Warn("Unknown embedder provider: %s, using mock embedder", cfg.Embedder.Provider)
+		emb = vector.NewMockEmbedder(dimensions)
+	}
+
+	if err := emb.Initialize(); err != nil {
+		logger.Error("Failed to initialize embedder: %v", err)
+		return nil, nil, nil, errortypes.ConfigError(err, "Failed to initialize embedder")
+	}
+
+	logger.Info("Components successfully initialized")
+	return store, sum, emb, nil
 }
 
-// GenerateHash creates a SHA-256 hash from content and a timestamp
-func GenerateHash(content string, timestamp int64) string {
-	// Combine content and timestamp
-	data := fmt.Sprintf("%s-%d", content, timestamp)
+// WithLogger sets a custom logger for the server.
+// This should be called immediately after creating the server with NewServer
+// and before calling any other methods if you need to replace the logger used during initialization.
+func (s *Server) WithLogger(customLogger logx.Logger) *Server {
+	if customLogger == nil {
+		return s
+	}
 
-	// Create hash
-	hash := sha256.Sum256([]byte(data))
+	s.logger = customLogger
 
-	// Convert to hex string and return first 16 characters
-	return hex.EncodeToString(hash[:])[:16]
+	// If the toolServer has been initialized, update its logger
+	if mcp, ok := s.toolServer.(*server.MCPContextToolServer); ok && mcp != nil {
+		mcp.WithLogger(customLogger)
+	}
+
+	return s
+}
+
+// GenerateHash creates a hash from the summary and a timestamp
+// This is a convenience wrapper around the internal util.GenerateHash function
+func GenerateHash(summary string, timestamp int64) string {
+	return util.GenerateHash(summary, timestamp)
 }
