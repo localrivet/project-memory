@@ -5,10 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/localrivet/gomcp"
-	"github.com/localrivet/gomcp/logx"
 	"github.com/localrivet/gomcp/server"
 	"github.com/localrivet/projectmemory/internal/contextstore"
 	"github.com/localrivet/projectmemory/internal/errortypes"
@@ -30,7 +30,6 @@ type MCPContextToolServer struct {
 	summarizer summarizer.Summarizer
 	embedder   vector.Embedder
 	mcpServer  *server.Server
-	logger     logx.Logger
 }
 
 // NewContextToolServer creates a new MCPContextToolServer instance.
@@ -39,13 +38,12 @@ func NewContextToolServer(store contextstore.ContextStore, summarizer summarizer
 		store:      store,
 		summarizer: summarizer,
 		embedder:   embedder,
-		logger:     logx.NewLogger("info"),
 	}
 }
 
 // Initialize initializes the server with dependencies and configurations.
 func (s *MCPContextToolServer) Initialize() error {
-	s.logger.Info("Initializing MCP Context Tool Server")
+	slog.Info("Initializing MCP Context Tool Server")
 
 	if s.store == nil || s.summarizer == nil || s.embedder == nil {
 		return errortypes.ConfigError(errors.New("missing dependencies"), "server initialization failed")
@@ -69,7 +67,7 @@ func (s *MCPContextToolServer) Initialize() error {
 		Tool(tools.ToolReplaceContext, "Replace an existing context entry with new content",
 			s.handleReplaceContext)
 
-	s.logger.Info("MCP Context Tool Server initialized successfully with %d tools", 5)
+	slog.Info("MCP Context Tool Server initialized successfully", "tool_count", 5)
 	return nil
 }
 
@@ -79,7 +77,7 @@ func (s *MCPContextToolServer) Start() error {
 		return errortypes.ConfigError(errors.New("server not initialized"), "cannot start server")
 	}
 
-	s.logger.Info("Starting MCP Context Tool Server")
+	slog.Info("Starting MCP Context Tool Server")
 
 	// Start the server using stdio transport
 	s.mcpServer.AsStdio().Run()
@@ -89,36 +87,26 @@ func (s *MCPContextToolServer) Start() error {
 
 // Stop gracefully shuts down the MCP server.
 func (s *MCPContextToolServer) Stop() error {
-	s.logger.Info("Stopping MCP Context Tool Server")
+	slog.Info("Stopping MCP Context Tool Server")
 	// The server will exit when stdin is closed
 	return nil
 }
 
-// WithLogger sets a custom logger for the server and passes it to the underlying gomcp server.
-func (s *MCPContextToolServer) WithLogger(customLogger logx.Logger) {
-	s.logger = customLogger
-
-	// If the gomcp server is already initialized, update its logger
-	if s.mcpServer != nil {
-		s.mcpServer.WithLogger(customLogger)
-	}
-}
-
 // handleSaveContext handles the save_context MCP tool call.
 func (s *MCPContextToolServer) handleSaveContext(ctx *server.Context, req tools.SaveContextRequest) (tools.SaveContextResponse, error) {
-	s.logger.Debug("Processing save_context request (text length: %d)", len(req.ContextText))
+	slog.Info("Processing save_context request", "text_length", len(req.ContextText))
 
 	response := tools.SaveContextResponse{
 		Status: "success",
 	}
 
 	// Generate summary
-	s.logger.Debug("Generating summary")
+	slog.Debug("Generating summary for save_context")
 	summary, err := s.summarizer.Summarize(req.ContextText)
 	if err != nil {
 		err = errortypes.APIError(err, "failed to summarize text").
 			WithField("text_length", len(req.ContextText))
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
@@ -126,12 +114,12 @@ func (s *MCPContextToolServer) handleSaveContext(ctx *server.Context, req tools.
 	}
 
 	// Create embedding
-	s.logger.Debug("Creating embedding")
+	slog.Debug("Creating embedding for save_context")
 	embedding, err := s.embedder.CreateEmbedding(summary)
 	if err != nil {
 		err = errortypes.APIError(err, "failed to create embedding").
 			WithField("summary_length", len(summary))
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
@@ -143,7 +131,7 @@ func (s *MCPContextToolServer) handleSaveContext(ctx *server.Context, req tools.
 	if err != nil {
 		err = errortypes.APIError(err, "failed to convert embedding to bytes").
 			WithField("embedding_size", len(embedding))
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
@@ -158,12 +146,12 @@ func (s *MCPContextToolServer) handleSaveContext(ctx *server.Context, req tools.
 	id := hex.EncodeToString(hasher.Sum(nil))[:16] // Use first 16 chars of the hash
 
 	// Store in context store
-	s.logger.Debug("Storing context with ID: %s", id)
+	slog.Debug("Storing context for save_context", "id", id)
 	err = s.store.Store(id, summary, embeddingBytes, timestamp)
 	if err != nil {
 		err = errortypes.DatabaseError(err, "failed to store context").
 			WithField("context_id", id)
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
@@ -172,7 +160,7 @@ func (s *MCPContextToolServer) handleSaveContext(ctx *server.Context, req tools.
 
 	// Set response
 	response.ID = id
-	s.logger.Info("Successfully saved context with ID: %s", id)
+	slog.Info("Successfully saved context", "id", id)
 
 	// Return response
 	return response, nil
@@ -180,7 +168,7 @@ func (s *MCPContextToolServer) handleSaveContext(ctx *server.Context, req tools.
 
 // handleRetrieveContext handles the retrieve_context MCP tool call.
 func (s *MCPContextToolServer) handleRetrieveContext(ctx *server.Context, req tools.RetrieveContextRequest) (tools.RetrieveContextResponse, error) {
-	s.logger.Debug("Processing retrieve_context request (query: %s, limit: %d)", req.Query, req.Limit)
+	slog.Info("Processing retrieve_context request", "query", req.Query, "limit", req.Limit)
 
 	response := tools.RetrieveContextResponse{
 		Status: "success",
@@ -190,16 +178,16 @@ func (s *MCPContextToolServer) handleRetrieveContext(ctx *server.Context, req to
 	limit := req.Limit
 	if limit <= 0 {
 		limit = tools.DefaultRetrieveLimit
-		s.logger.Debug("Using default limit: %d", limit)
+		slog.Debug("Using default limit for retrieve_context", "limit", limit)
 	}
 
 	// Create embedding for query
-	s.logger.Debug("Creating embedding for query")
+	slog.Debug("Creating embedding for query in retrieve_context")
 	queryEmbedding, err := s.embedder.CreateEmbedding(req.Query)
 	if err != nil {
 		err = errortypes.APIError(err, "failed to create embedding for query").
 			WithField("query", req.Query)
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
@@ -207,12 +195,12 @@ func (s *MCPContextToolServer) handleRetrieveContext(ctx *server.Context, req to
 	}
 
 	// Search context store
-	s.logger.Debug("Searching context store")
+	slog.Debug("Searching context store for retrieve_context")
 	results, err := s.store.Search(queryEmbedding, limit)
 	if err != nil {
 		err = errortypes.DatabaseError(err, "failed to search context store").
 			WithField("limit", limit)
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
@@ -221,7 +209,7 @@ func (s *MCPContextToolServer) handleRetrieveContext(ctx *server.Context, req to
 
 	// Set response
 	response.Results = results
-	s.logger.Info("Successfully retrieved %d context results", len(results))
+	slog.Info("Successfully retrieved context results", "count", len(results))
 
 	// Return response
 	return response, nil
@@ -229,25 +217,25 @@ func (s *MCPContextToolServer) handleRetrieveContext(ctx *server.Context, req to
 
 // handleDeleteContext handles the delete_context MCP tool call.
 func (s *MCPContextToolServer) handleDeleteContext(ctx *server.Context, req tools.DeleteContextRequest) (tools.DeleteContextResponse, error) {
-	s.logger.Debug("Processing delete_context request (ID: %s)", req.ID)
+	slog.Info("Processing delete_context request", "id", req.ID)
 
 	response := tools.DeleteContextResponse{
 		Status: "success",
 	}
 
-	// Delete from context store
+	// Delete context entry
 	err := s.store.Delete(req.ID)
 	if err != nil {
 		err = errortypes.DatabaseError(err, "failed to delete context").
 			WithField("context_id", req.ID)
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
 		return response, nil
 	}
 
-	s.logger.Info("Successfully deleted context with ID: %s", req.ID)
+	slog.Info("Successfully deleted context", "id", req.ID)
 
 	// Return response
 	return response, nil
@@ -255,7 +243,7 @@ func (s *MCPContextToolServer) handleDeleteContext(ctx *server.Context, req tool
 
 // handleClearAllContext handles the clear_all_context MCP tool call.
 func (s *MCPContextToolServer) handleClearAllContext(ctx *server.Context, req tools.ClearAllContextRequest) (tools.ClearAllContextResponse, error) {
-	s.logger.Debug("Processing clear_all_context request")
+	slog.Info("Processing clear_all_context request")
 
 	response := tools.ClearAllContextResponse{
 		Status: "success",
@@ -265,24 +253,23 @@ func (s *MCPContextToolServer) handleClearAllContext(ctx *server.Context, req to
 	if req.Confirmation != "confirm" {
 		response.Status = "error"
 		response.Error = "Confirmation required. Set confirmation to 'confirm' to proceed with clearing all context"
-		s.logger.Warn("Clear all context operation rejected: missing confirmation")
+		slog.Warn("Clear all context operation rejected: missing confirmation")
 		return response, nil
 	}
 
 	// Clear all entries from context store
 	count, err := s.store.Clear()
 	if err != nil {
-		err = errortypes.DatabaseError(err, "failed to clear all context").
-			WithField("clear_all", true)
-		errortypes.LogError(err)
+		err = errortypes.DatabaseError(err, "failed to clear context store")
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
 		return response, nil
 	}
 
+	slog.Info("Successfully cleared context entries", "count", count)
 	response.DeletedCount = count
-	s.logger.Info("Successfully cleared all context (%d entries removed)", count)
 
 	// Return response
 	return response, nil
@@ -290,19 +277,28 @@ func (s *MCPContextToolServer) handleClearAllContext(ctx *server.Context, req to
 
 // handleReplaceContext handles the replace_context MCP tool call.
 func (s *MCPContextToolServer) handleReplaceContext(ctx *server.Context, req tools.ReplaceContextRequest) (tools.ReplaceContextResponse, error) {
-	s.logger.Debug("Processing replace_context request (ID: %s, text length: %d)", req.ID, len(req.ContextText))
+	slog.Info("Processing replace_context request", "id", req.ID, "new_text_length", len(req.ContextText))
 
 	response := tools.ReplaceContextResponse{
 		Status: "success",
 	}
 
+	// Validate ID
+	if req.ID == "" {
+		err := errortypes.ValidationError(errors.New("id cannot be empty for replace_context"), "invalid replace_context request")
+		errortypes.LogError(nil, err)
+		response.Status = "error"
+		response.Error = err.Error()
+		return response, nil
+	}
+
 	// Generate summary
-	s.logger.Debug("Generating summary for replacement")
+	slog.Debug("Generating summary for replace_context")
 	summary, err := s.summarizer.Summarize(req.ContextText)
 	if err != nil {
-		err = errortypes.APIError(err, "failed to summarize replacement text").
+		err = errortypes.APIError(err, "failed to summarize new text for replace_context").
 			WithField("text_length", len(req.ContextText))
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
@@ -310,12 +306,12 @@ func (s *MCPContextToolServer) handleReplaceContext(ctx *server.Context, req too
 	}
 
 	// Create embedding
-	s.logger.Debug("Creating embedding for replacement")
+	slog.Debug("Creating new embedding for replace_context")
 	embedding, err := s.embedder.CreateEmbedding(summary)
 	if err != nil {
-		err = errortypes.APIError(err, "failed to create embedding for replacement").
+		err = errortypes.APIError(err, "failed to create new embedding for replace_context").
 			WithField("summary_length", len(summary))
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
@@ -325,29 +321,30 @@ func (s *MCPContextToolServer) handleReplaceContext(ctx *server.Context, req too
 	// Convert embedding to bytes
 	embeddingBytes, err := vector.Float32SliceToBytes(embedding)
 	if err != nil {
-		err = errortypes.APIError(err, "failed to convert replacement embedding to bytes").
+		err = errortypes.APIError(err, "failed to convert new embedding to bytes for replace_context").
 			WithField("embedding_size", len(embedding))
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
 		return response, nil
 	}
 
-	// Replace in context store
+	// Store (Replace) in context store
+	slog.Debug("Replacing context for replace_context", "id", req.ID)
 	timestamp := time.Now()
 	err = s.store.Replace(req.ID, summary, embeddingBytes, timestamp)
 	if err != nil {
-		err = errortypes.DatabaseError(err, "failed to replace context").
+		err = errortypes.DatabaseError(err, "failed to replace context for replace_context").
 			WithField("context_id", req.ID)
-		errortypes.LogError(err)
+		errortypes.LogError(nil, err)
 
 		response.Status = "error"
 		response.Error = err.Error()
 		return response, nil
 	}
 
-	s.logger.Info("Successfully replaced context with ID: %s", req.ID)
+	slog.Info("Successfully replaced context", "id", req.ID)
 
 	// Return response
 	return response, nil

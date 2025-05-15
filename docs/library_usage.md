@@ -14,9 +14,9 @@ This approach gives you the most control and avoids any MCP server conflicts. Yo
 import (
     "time"
 
-    "github.com/localrivet/projectmemory"
     "github.com/localrivet/projectmemory/internal/contextstore"
     "github.com/localrivet/projectmemory/internal/summarizer"
+    "github.com/localrivet/projectmemory/internal/util"
     "github.com/localrivet/projectmemory/internal/vector"
 )
 
@@ -38,7 +38,7 @@ func main() {
     summary, _ := summ.Summarize(testText)
     embedding, _ := emb.CreateEmbedding(summary)
     embeddingBytes, _ := vector.Float32SliceToBytes(embedding)
-    id := projectmemory.GenerateHash(summary, time.Now().UnixNano())
+    id := util.GenerateHash(summary, time.Now().UnixNano())
     store.Store(id, summary, embeddingBytes, time.Now())
 
     // To retrieve context:
@@ -75,16 +75,24 @@ This approach uses a helper function to create all the components at once, which
 
 ```go
 import (
+    "github.com/localrivet/gomcp/logx"
     "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/config"
 )
 
 func main() {
     // Create a configuration
-    config := projectmemory.DefaultConfig()
-    config.Database.Path = ".projectmemory.db"
+    config := &config.Config{}
+    config.Store.SQLitePath = ".projectmemory.db"
+    config.Summarizer.Provider = "basic"
+    config.Embedder.Provider = "mock"
+    config.Embedder.Dimensions = 768 // or use vector.DefaultEmbeddingDimensions
+
+    // Create a logger
+    logger := logx.NewLogger("info")
 
     // Initialize all components at once
-    store, summ, emb, err := projectmemory.CreateComponents(config)
+    store, summ, emb, err := projectmemory.CreateComponents(config, logger)
     if err != nil {
         // Handle error
     }
@@ -103,13 +111,19 @@ This approach uses the high-level Server API but avoids starting the MCP server.
 
 ```go
 import (
+    "github.com/localrivet/gomcp/logx"
     "github.com/localrivet/projectmemory"
 )
 
 func main() {
+    // Create a configuration file path
+    configPath := ".projectmemoryconfig"
+
+    // Create a logger
+    logger := logx.NewLogger("info")
+
     // Create and initialize server
-    config := projectmemory.DefaultConfig()
-    pmServer, err := projectmemory.NewServer(config)
+    pmServer, err := projectmemory.NewServer(configPath, logger)
     if err != nil {
         // Handle error
     }
@@ -125,7 +139,7 @@ func main() {
         // Handle error
     }
 
-    // Use the new memory management methods
+    // Use the memory management methods
     err = pmServer.DeleteContext(id)
     if err != nil {
         // Handle error
@@ -162,18 +176,26 @@ import (
     "time"
 
     "github.com/localrivet/gomcp"
+    "github.com/localrivet/gomcp/logx"
     gomcpserver "github.com/localrivet/gomcp/server"
 
-    "github.com/localrivet/projectmemory"
+    "github.com/localrivet/projectmemory/internal/contextstore"
+    "github.com/localrivet/projectmemory/internal/summarizer"
     "github.com/localrivet/projectmemory/internal/tools"
+    "github.com/localrivet/projectmemory/internal/util"
+    "github.com/localrivet/projectmemory/internal/vector"
 )
 
 func main() {
     // Initialize ProjectMemory components using any of the approaches above
     // ...
 
+    // Create logger
+    logger := logx.NewLogger("info")
+
     // Create your own MCP server
     mcpServer := gomcp.NewServer("your-mcp-server")
+    mcpServer.WithLogger(logger)
 
     // Register ProjectMemory tools with your server
     mcpServer = mcpServer.Tool(tools.ToolSaveContext, "Save context to the memory store",
@@ -204,7 +226,7 @@ func main() {
                 return response, nil
             }
 
-            id := projectmemory.GenerateHash(summary, time.Now().UnixNano())
+            id := util.GenerateHash(summary, time.Now().UnixNano())
             err = store.Store(id, summary, embeddingBytes, time.Now())
             if err != nil {
                 response.Status = "error"
@@ -325,72 +347,104 @@ func main() {
 
 ## Custom Logging
 
-When embedding ProjectMemory in your application, you may want to integrate with your application's existing logging system. ProjectMemory provides two ways to customize logging:
+When embedding ProjectMemory in your application, you may want to integrate with your application's existing logging system. ProjectMemory uses `github.com/localrivet/gomcp/logx` for logging:
 
-### Using the StandardLoggerAdapter
+```go
+import (
+    "github.com/localrivet/gomcp/logx"
+    "github.com/localrivet/projectmemory"
+)
 
-The simplest approach is to use the `StandardLoggerAdapter` to adapt a standard Go logger:
+// Create a logger
+logger := logx.NewLogger("info") // or "debug", "warn", "error"
+
+// Use it with ProjectMemory
+config := &config.Config{}
+// Set configuration properties...
+
+// Create server with custom logger
+server, err := projectmemory.NewServer(".projectmemoryconfig", logger)
+if err != nil {
+    // Handle error
+}
+
+// Or use with components
+store, summ, emb, err := projectmemory.CreateComponents(config, logger)
+```
+
+## Standard Logger Integration
+
+ProjectMemory provides functions to integrate with Go's standard library logging package. This is useful when working with code that uses the standard `log` package but you want to take advantage of ProjectMemory's logging capabilities.
+
+### Creating a Standard Logger Backed by LogX
+
+You can create a standard library `*log.Logger` that's backed by a LogX logger:
 
 ```go
 import (
     "log"
-    "os"
-
+    "github.com/localrivet/gomcp/logx"
     "github.com/localrivet/projectmemory"
 )
 
-// Create your application's logger
-appLogger := log.New(os.Stderr, "[MyApp] ", log.LstdFlags)
+// Create a LogX logger
+logger := logx.NewLogger("info")
 
-// Convert it to a ProjectMemory-compatible logger
-pmLogger := projectmemory.NewStandardLoggerAdapter(appLogger, "info", "text")
+// Create a standard logger that uses LogX
+stdLogger := projectmemory.AsStdLogger(logger, projectmemory.InfoLevel)
 
-// Create the server
-config := projectmemory.DefaultConfig()
-server, err := projectmemory.NewServer(config)
-if err != nil {
-    appLogger.Fatalf("Failed to create ProjectMemory server: %v", err)
-}
-
-// Set the custom logger
-server.WithLogger(pmLogger)
-
-// Now all ProjectMemory logs will go through your application's logger
+// Use the standard logger as usual
+stdLogger.Println("This message is processed by LogX")
+stdLogger.Printf("User %s logged in", username)
 ```
 
-### Logging to a File
+### Replacing the Global Standard Logger
 
-To direct ProjectMemory logs to a file:
+For broader integration, you can completely replace Go's global standard logger with a LogX-powered version:
 
 ```go
-// Create a log file
-logFile, err := os.OpenFile("projectmemory.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-if err != nil {
-    log.Fatalf("Failed to open log file: %v", err)
-}
-defer logFile.Close()
+import (
+    "log"
+    "github.com/localrivet/gomcp/logx"
+    "github.com/localrivet/projectmemory"
+)
 
-// Create a logger that writes to the file
-fileLogger := log.New(logFile, "", log.LstdFlags)
+// Create a LogX logger
+logger := logx.NewLogger("info")
 
-// Adapt it for ProjectMemory
-pmLogger := projectmemory.NewStandardLoggerAdapter(fileLogger, "debug", "json")
+// Replace the global standard logger
+projectmemory.ReplaceStdLogger(logger, projectmemory.InfoLevel)
 
-// Create the server and set the logger
-config := projectmemory.DefaultConfig()
-server, err := projectmemory.NewServer(config)
-if err != nil {
-    log.Fatalf("Failed to create ProjectMemory server: %v", err)
-}
-server.WithLogger(pmLogger)
+// Now all standard log calls use LogX
+log.Println("This message uses LogX")
+log.Printf("Request received: %s", requestID)
+
+// Even third-party libraries using the standard logger will now use LogX
 ```
 
-### Important Notes
+### Log Levels
 
-1. Always call `WithLogger()` immediately after creating the server and before using any other methods.
-2. The logging level can be set to: "debug", "info", "warn", "error", or "fatal".
-3. The format can be "text" (default) or "json".
-4. When using JSON format, logs are structured and can be easily parsed by log management tools.
+You can specify which level to use for standard library log messages:
+
+```go
+// Log standard messages at debug level
+projectmemory.ReplaceStdLogger(logger, projectmemory.DebugLevel)
+
+// Log standard messages at info level (default)
+projectmemory.ReplaceStdLogger(logger, projectmemory.InfoLevel)
+
+// Log standard messages at warn level
+projectmemory.ReplaceStdLogger(logger, projectmemory.WarnLevel)
+
+// Log standard messages at error level
+projectmemory.ReplaceStdLogger(logger, projectmemory.ErrorLevel)
+```
+
+This feature is particularly useful when:
+
+- Integrating with existing code that uses the standard logger
+- Working with third-party libraries that use the standard logger
+- Gradually migrating a codebase to use LogX
 
 ## Complete Example
 

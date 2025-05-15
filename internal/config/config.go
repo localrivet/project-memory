@@ -185,29 +185,6 @@ func (c *Config) GetConfigPath() string {
 	return c.configPath
 }
 
-// ToLegacyConfig converts the internal config to the format used in projectmemory.go
-// This is for backward compatibility
-func (c *Config) ToLegacyConfig() map[string]interface{} {
-	return map[string]interface{}{
-		"store": map[string]interface{}{
-			"sqlite_path": c.Store.SQLitePath,
-		},
-		"summarizer": map[string]interface{}{
-			"provider": c.Summarizer.Provider,
-			"api_key":  c.Summarizer.ApiKey,
-		},
-		"embedder": map[string]interface{}{
-			"provider":   c.Embedder.Provider,
-			"dimensions": c.Embedder.Dimensions,
-			"api_key":    c.Embedder.ApiKey,
-		},
-		"logging": map[string]interface{}{
-			"level":  c.Logging.Level,
-			"format": c.Logging.Format,
-		},
-	}
-}
-
 // GetLoggerFromConfig creates a gomcp logx.Logger based on the configuration
 func GetLoggerFromConfig(cfg *Config) logx.Logger {
 	return logx.NewLogger(cfg.Logging.Level)

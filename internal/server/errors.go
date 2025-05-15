@@ -4,18 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/localrivet/projectmemory/internal/errortypes"
-	"github.com/localrivet/projectmemory/internal/logger"
 )
 
 // ErrorResponse represents the structure of error responses sent by the API
 type ErrorResponse struct {
-	Status  int    `json:"status"`
-	Message string `json:"message"`
-	Code    string `json:"code,omitempty"`
-	Details string `json:"details,omitempty"`
+	Status     string                 `json:"status"`
+	Code       string                 `json:"code"`
+	Message    string                 `json:"message"`
+	Details    map[string]interface{} `json:"details,omitempty"`
+	StackTrace string                 `json:"stack_trace,omitempty"`
 }
 
 // Common error codes
@@ -36,18 +37,32 @@ const (
 	ErrorCodeBadGateway = "BAD_GATEWAY"
 )
 
+// Error response codes
+const (
+	StatusCodeValidationError = "VALIDATION_ERROR"
+	StatusCodePermissionError = "PERMISSION_ERROR"
+	StatusCodeDatabaseError   = "DATABASE_ERROR"
+	StatusCodeNetworkError    = "NETWORK_ERROR"
+	StatusCodeInternalError   = "INTERNAL_ERROR"
+	StatusCodeConfigError     = "CONFIG_ERROR"
+	StatusCodeExternalError   = "EXTERNAL_ERROR"
+	StatusCodeUnknownError    = "UNKNOWN_ERROR"
+)
+
 // writeErrorResponse writes a structured error response to the HTTP response writer
 func writeErrorResponse(w http.ResponseWriter, status int, code, message string, err error) {
 	// Create the error response
 	errResp := ErrorResponse{
-		Status:  status,
-		Message: message,
+		Status:  "error",
 		Code:    code,
+		Message: message,
 	}
 
 	// Add details from the error if available
 	if err != nil {
-		errResp.Details = err.Error()
+		errResp.Details = map[string]interface{}{
+			"error": err.Error(),
+		}
 
 		// Log the error with structured context
 		logErr := errortypes.APIError(err, fmt.Sprintf("API Error (%s)", code)).
@@ -55,7 +70,7 @@ func writeErrorResponse(w http.ResponseWriter, status int, code, message string,
 			WithField("error_code", code).
 			WithField("client_message", message)
 
-		errortypes.LogError(logErr)
+		errortypes.LogError(nil, logErr)
 	}
 
 	// Set content type and status code
@@ -65,7 +80,7 @@ func writeErrorResponse(w http.ResponseWriter, status int, code, message string,
 	// Encode and send the response
 	if err := json.NewEncoder(w).Encode(errResp); err != nil {
 		// If JSON encoding fails, fall back to plain text
-		fmt.Fprintf(errortypes.DefaultErrorOutput, "ERROR: Failed to encode error response: %v\n", err)
+		slog.Error("Failed to encode error response", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -159,59 +174,118 @@ func HandleError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	// Check for logger.AppError (used in tests)
-	var loggerErr *logger.AppError
-	if errors.As(err, &loggerErr) {
+	// Check for AppError
+	var appErr *errortypes.AppError
+	if errors.As(err, &appErr) {
 		// Get the error type and handle accordingly
-		errType := loggerErr.Type
+		errType := appErr.Type
 
 		switch errType {
-		case logger.ErrorTypeValidation:
+		case errortypes.ErrorTypeValidation:
 			HandleBadRequest(w, "Invalid request parameters", err)
 			return
-		case logger.ErrorTypePermission:
+		case errortypes.ErrorTypePermission:
 			HandleUnauthorized(w, "Permission denied", err)
 			return
-		case logger.ErrorTypeNetwork:
+		case errortypes.ErrorTypeNetwork:
 			HandleBadGateway(w, "Network error", err)
 			return
-		case logger.ErrorTypeDatabase, logger.ErrorTypeInternal:
+		case errortypes.ErrorTypeDatabase, errortypes.ErrorTypeInternal:
 			HandleInternalError(w, "An unexpected error occurred", err)
 			return
-		case logger.ErrorTypeAPI, logger.ErrorTypeExternal:
+		case errortypes.ErrorTypeAPI, errortypes.ErrorTypeExternal:
 			HandleBadGateway(w, "Downstream service error", err)
 			return
 		}
 	}
 
-	// Check for specific error types from our errortypes package
-	if errortypes.IsErrorType(err, errortypes.ErrorTypeValidation) {
+	// Check for specific error types using helper functions
+	if errortypes.IsValidationError(err) {
 		HandleBadRequest(w, "Invalid request parameters", err)
 		return
 	}
 
-	if errortypes.IsErrorType(err, errortypes.ErrorTypePermission) {
+	if errortypes.IsPermissionError(err) {
 		HandleUnauthorized(w, "Permission denied", err)
 		return
 	}
 
-	if errortypes.IsErrorType(err, errortypes.ErrorTypeNetwork) {
+	if errortypes.IsNetworkError(err) {
 		HandleBadGateway(w, "Network error", err)
 		return
 	}
 
-	if errortypes.IsErrorType(err, errortypes.ErrorTypeDatabase) ||
-		errortypes.IsErrorType(err, errortypes.ErrorTypeInternal) {
+	if errortypes.IsDatabaseError(err) {
 		HandleInternalError(w, "An unexpected error occurred", err)
-		return
-	}
-
-	if errortypes.IsErrorType(err, errortypes.ErrorTypeAPI) ||
-		errortypes.IsErrorType(err, errortypes.ErrorTypeExternal) {
-		HandleBadGateway(w, "Downstream service error", err)
 		return
 	}
 
 	// Default to internal server error for unknown error types
 	HandleInternalError(w, "An unexpected error occurred", err)
+}
+
+// WriteError writes an error response to the HTTP response writer
+func WriteError(w http.ResponseWriter, err error, status int) {
+	// Log the error
+	slog.Error("API Error", "error", err, "status", status)
+
+	// Check if it's a known error type
+	errorResponse := errorToResponse(err)
+
+	// Set the HTTP status code
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	// Write the error response as JSON
+	if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
+		// If we can't encode the JSON, fall back to a simple text response
+		slog.Error("Error encoding JSON error response", "error", err, "original_error_message", errorResponse.Message, "status", status)
+		http.Error(w, errorResponse.Message, status)
+	}
+}
+
+// errorToResponse converts an error to a standardized ErrorResponse
+func errorToResponse(err error) ErrorResponse {
+	var code string
+	var details map[string]interface{}
+	var stackTrace string
+	message := err.Error()
+
+	// Check if it's an AppError
+	var appErr *errortypes.AppError
+	if errors.As(err, &appErr) {
+		// Set details from the app error
+		details = appErr.Fields
+		stackTrace = appErr.StackInfo
+
+		// Set the error code based on the error type
+		switch appErr.Type {
+		case errortypes.ErrorTypeValidation:
+			code = StatusCodeValidationError
+		case errortypes.ErrorTypePermission:
+			code = StatusCodePermissionError
+		case errortypes.ErrorTypeNetwork:
+			code = StatusCodeNetworkError
+		case errortypes.ErrorTypeDatabase, errortypes.ErrorTypeInternal:
+			code = StatusCodeInternalError
+		case errortypes.ErrorTypeAPI, errortypes.ErrorTypeExternal:
+			code = StatusCodeExternalError
+		case errortypes.ErrorTypeConfig:
+			code = StatusCodeConfigError
+		default:
+			code = StatusCodeUnknownError
+		}
+	} else {
+		// Generic error, use unknown error code
+		code = StatusCodeUnknownError
+	}
+
+	// Return the standardized error response
+	return ErrorResponse{
+		Status:     "error",
+		Code:       code,
+		Message:    message,
+		Details:    details,
+		StackTrace: stackTrace,
+	}
 }

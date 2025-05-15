@@ -1,172 +1,206 @@
-// Package errortypes provides error types and utilities for the projectmemory service.
+// Package errortypes provides error types and handling for ProjectMemory.
 package errortypes
 
 import (
 	"errors"
 	"fmt"
-	"os"
+	"log/slog"
+	"runtime"
+	"strings"
 )
 
-// ErrorType represents the category of an error
+// ErrorType represents the type of error that occurred
 type ErrorType string
 
-// Error type constants
+// Error types
 const (
 	ErrorTypeValidation ErrorType = "validation"
 	ErrorTypePermission ErrorType = "permission"
 	ErrorTypeDatabase   ErrorType = "database"
-	ErrorTypeInternal   ErrorType = "internal"
-	ErrorTypeAPI        ErrorType = "api"
 	ErrorTypeNetwork    ErrorType = "network"
-	ErrorTypeExternal   ErrorType = "external"
+	ErrorTypeAPI        ErrorType = "api"
 	ErrorTypeConfig     ErrorType = "config"
+	ErrorTypeInternal   ErrorType = "internal"
+	ErrorTypeExternal   ErrorType = "external"
 )
 
-// TypedError is an error with an associated error type
-type TypedError struct {
-	err      error
-	errType  ErrorType
-	message  string
-	metadata map[string]interface{}
+// AppError represents an application error with context
+type AppError struct {
+	Err       error
+	Type      ErrorType
+	Message   string
+	StackInfo string
+	Fields    map[string]interface{}
 }
 
-// Error returns the error message
-func (e *TypedError) Error() string {
-	if e.message != "" {
-		return fmt.Sprintf("%s: %v", e.message, e.err)
+// Error implements the error interface
+func (e *AppError) Error() string {
+	if e.Message != "" {
+		return fmt.Sprintf("%s: %v", e.Message, e.Err)
 	}
-	return e.err.Error()
+	return e.Err.Error()
 }
 
-// Unwrap returns the underlying error
-func (e *TypedError) Unwrap() error {
-	return e.err
+// Unwrap unwraps the error to support errors.Is and errors.As
+func (e *AppError) Unwrap() error {
+	return e.Err
 }
 
-// Type returns the error type
-func (e *TypedError) Type() ErrorType {
-	return e.errType
-}
-
-// WithField adds metadata to the error
-func (e *TypedError) WithField(key string, value interface{}) *TypedError {
-	if e.metadata == nil {
-		e.metadata = make(map[string]interface{})
+// WithField adds a field to the error for additional context
+func (e *AppError) WithField(key string, value interface{}) *AppError {
+	if e.Fields == nil {
+		e.Fields = make(map[string]interface{})
 	}
-	e.metadata[key] = value
+	e.Fields[key] = value
 	return e
 }
 
-// GetField retrieves metadata from the error
-func (e *TypedError) GetField(key string) (interface{}, bool) {
-	if e.metadata == nil {
-		return nil, false
+// WithFields adds multiple fields to the error for additional context
+func (e *AppError) WithFields(fields map[string]interface{}) *AppError {
+	if e.Fields == nil {
+		e.Fields = make(map[string]interface{})
 	}
-	val, ok := e.metadata[key]
-	return val, ok
+	for k, v := range fields {
+		e.Fields[k] = v
+	}
+	return e
 }
 
-// IsErrorType checks if an error is of a specific type
-func IsErrorType(err error, errType ErrorType) bool {
-	var typedErr *TypedError
-	if errors.As(err, &typedErr) {
-		return typedErr.errType == errType
+// captureStack captures the stack trace at the call site
+func captureStack() string {
+	const depth = 32
+	var pcs [depth]uintptr
+	n := runtime.Callers(3, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+
+	var builder strings.Builder
+	for {
+		frame, more := frames.Next()
+		// Skip testing and standard library frames
+		if !strings.Contains(frame.File, "testing/") && !strings.Contains(frame.File, "/go/src/") {
+			fmt.Fprintf(&builder, "%s:%d %s\n", frame.File, frame.Line, frame.Function)
+		}
+		if !more {
+			break
+		}
+	}
+	return builder.String()
+}
+
+// newAppError creates a new AppError with the given type, underlying error, and message
+func newAppError(errType ErrorType, err error, message string) *AppError {
+	if err == nil {
+		err = errors.New("unknown error")
+	}
+
+	return &AppError{
+		Err:       err,
+		Type:      errType,
+		Message:   message,
+		StackInfo: captureStack(),
+		Fields:    make(map[string]interface{}),
+	}
+}
+
+// ValidationError creates a new validation error
+func ValidationError(err error, message string) *AppError {
+	return newAppError(ErrorTypeValidation, err, message)
+}
+
+// PermissionError creates a new permission error
+func PermissionError(err error, message string) *AppError {
+	return newAppError(ErrorTypePermission, err, message)
+}
+
+// DatabaseError creates a new database error
+func DatabaseError(err error, message string) *AppError {
+	return newAppError(ErrorTypeDatabase, err, message)
+}
+
+// NetworkError creates a new network error
+func NetworkError(err error, message string) *AppError {
+	return newAppError(ErrorTypeNetwork, err, message)
+}
+
+// APIError creates a new API error
+func APIError(err error, message string) *AppError {
+	return newAppError(ErrorTypeAPI, err, message)
+}
+
+// ConfigError creates a new configuration error
+func ConfigError(err error, message string) *AppError {
+	return newAppError(ErrorTypeConfig, err, message)
+}
+
+// InternalError creates a new internal error
+func InternalError(err error, message string) *AppError {
+	return newAppError(ErrorTypeInternal, err, message)
+}
+
+// ExternalError creates a new external error
+func ExternalError(err error, message string) *AppError {
+	return newAppError(ErrorTypeExternal, err, message)
+}
+
+// LogError logs an AppError using the provided slog.Logger or the default slog logger.
+// It logs the error message, type, stack trace, and any associated fields.
+func LogError(logger *slog.Logger, err error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		// Prepare arguments for structured logging
+		args := []any{
+			"type", string(appErr.Type),
+			"original_error", appErr.Err.Error(),
+		}
+		if appErr.StackInfo != "" {
+			args = append(args, "stack", appErr.StackInfo)
+		}
+		for k, v := range appErr.Fields {
+			args = append(args, k, v)
+		}
+		logger.Error(appErr.Message, args...)
+	} else {
+		// For generic errors, log the error message and the error itself
+		logger.Error(err.Error(), "error", err)
+	}
+}
+
+// IsValidationError checks if an error is a validation error
+func IsValidationError(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == ErrorTypeValidation
 	}
 	return false
 }
 
-// ValidationError creates a validation error
-func ValidationError(err error, message string) *TypedError {
-	return &TypedError{
-		err:     err,
-		errType: ErrorTypeValidation,
-		message: message,
+// IsPermissionError checks if an error is a permission error
+func IsPermissionError(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == ErrorTypePermission
 	}
+	return false
 }
 
-// PermissionError creates a permission error
-func PermissionError(err error, message string) *TypedError {
-	return &TypedError{
-		err:     err,
-		errType: ErrorTypePermission,
-		message: message,
+// IsDatabaseError checks if an error is a database error
+func IsDatabaseError(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == ErrorTypeDatabase
 	}
+	return false
 }
 
-// DatabaseError creates a database error
-func DatabaseError(err error, message string) *TypedError {
-	return &TypedError{
-		err:     err,
-		errType: ErrorTypeDatabase,
-		message: message,
+// IsNetworkError checks if an error is a network error
+func IsNetworkError(err error) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Type == ErrorTypeNetwork
 	}
-}
-
-// InternalError creates an internal error
-func InternalError(err error, message string) *TypedError {
-	return &TypedError{
-		err:     err,
-		errType: ErrorTypeInternal,
-		message: message,
-	}
-}
-
-// APIError creates an API error
-func APIError(err error, message string) *TypedError {
-	return &TypedError{
-		err:     err,
-		errType: ErrorTypeAPI,
-		message: message,
-	}
-}
-
-// NetworkError creates a network error
-func NetworkError(err error, message string) *TypedError {
-	return &TypedError{
-		err:     err,
-		errType: ErrorTypeNetwork,
-		message: message,
-	}
-}
-
-// ExternalError creates an external service error
-func ExternalError(err error, message string) *TypedError {
-	return &TypedError{
-		err:     err,
-		errType: ErrorTypeExternal,
-		message: message,
-	}
-}
-
-// ConfigError creates a configuration error
-func ConfigError(err error, message string) *TypedError {
-	return &TypedError{
-		err:     err,
-		errType: ErrorTypeConfig,
-		message: message,
-	}
-}
-
-// LogError logs an error to stderr, useful for quick error logging without a logger
-func LogError(err error) {
-	fmt.Fprintf(standardErrorWriter, "ERROR: %v\n", err)
-}
-
-// standardErrorWriter is used for the LogError function
-var standardErrorWriter = &fmtErrorWriter{}
-
-type fmtErrorWriter struct{}
-
-func (w *fmtErrorWriter) Write(p []byte) (n int, err error) {
-	return fmt.Fprintf(DefaultErrorOutput, "%s", p)
-}
-
-// DefaultErrorOutput is the default output for error logging
-var DefaultErrorOutput = errorWriter(2)
-
-// errorWriter creates a writer that writes to the Stderr
-type errorWriter int
-
-func (errorWriter) Write(p []byte) (n int, err error) {
-	return fmt.Fprintf(os.Stderr, "%s", p)
+	return false
 }

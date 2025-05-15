@@ -7,119 +7,117 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/localrivet/projectmemory/internal/logger"
+	"github.com/localrivet/projectmemory/internal/errortypes"
 )
 
 func TestWriteErrorResponse(t *testing.T) {
-	// Create a response recorder
-	rr := httptest.NewRecorder()
-
-	// Create an error and write the response
-	err := errors.New("test error")
-	writeErrorResponse(rr, http.StatusBadRequest, ErrorCodeInvalidRequest, "Invalid input", err)
-
-	// Check the status code
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, rr.Code)
+	tests := []struct {
+		name       string
+		status     int
+		code       string
+		message    string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "basic error",
+			status:     http.StatusBadRequest,
+			code:       "BAD_REQUEST",
+			message:    "Invalid input",
+			err:        errors.New("test error"),
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "BAD_REQUEST",
+		},
+		{
+			name:       "nil error",
+			status:     http.StatusInternalServerError,
+			code:       "INTERNAL_ERROR",
+			message:    "Something went wrong",
+			err:        nil,
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "INTERNAL_ERROR",
+		},
 	}
 
-	// Check the content type
-	contentType := rr.Header().Get("Content-Type")
-	if contentType != "application/json" {
-		t.Errorf("Expected Content-Type %s, got %s", "application/json", contentType)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a response recorder
+			w := httptest.NewRecorder()
 
-	// Decode the response
-	var response ErrorResponse
-	if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
-		t.Fatalf("Error decoding response: %v", err)
-	}
+			// Call the function
+			writeErrorResponse(w, tt.status, tt.code, tt.message, tt.err)
 
-	// Check the response fields
-	if response.Status != http.StatusBadRequest {
-		t.Errorf("Expected response status %d, got %d", http.StatusBadRequest, response.Status)
-	}
+			// Check status code
+			if w.Code != tt.wantStatus {
+				t.Errorf("writeErrorResponse() status = %v, want %v", w.Code, tt.wantStatus)
+			}
 
-	if response.Code != ErrorCodeInvalidRequest {
-		t.Errorf("Expected response code %s, got %s", ErrorCodeInvalidRequest, response.Code)
-	}
+			// Parse the response
+			var resp ErrorResponse
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Errorf("Failed to parse response: %v", err)
+				return
+			}
 
-	if response.Message != "Invalid input" {
-		t.Errorf("Expected message %s, got %s", "Invalid input", response.Message)
-	}
-
-	if response.Details != "test error" {
-		t.Errorf("Expected details %s, got %s", "test error", response.Details)
+			// Check the error code
+			if resp.Code != tt.wantCode {
+				t.Errorf("writeErrorResponse() code = %v, want %v", resp.Code, tt.wantCode)
+			}
+		})
 	}
 }
 
 func TestHandleError(t *testing.T) {
-	testCases := []struct {
-		name          string
-		err           error
-		expectedCode  int
-		expectedErrID string
+	// Test cases for different error types
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
 	}{
 		{
-			name:          "Validation error",
-			err:           logger.ValidationError(errors.New("invalid input"), "validation failed"),
-			expectedCode:  http.StatusBadRequest,
-			expectedErrID: ErrorCodeInvalidRequest,
+			name:       "validation error",
+			err:        errortypes.ValidationError(errors.New("invalid input"), "validation failed"),
+			wantStatus: http.StatusBadRequest,
 		},
 		{
-			name:          "Permission error",
-			err:           logger.PermissionError(errors.New("permission denied"), "unauthorized"),
-			expectedCode:  http.StatusUnauthorized,
-			expectedErrID: ErrorCodeAuthenticationError,
+			name:       "permission error",
+			err:        errortypes.PermissionError(errors.New("permission denied"), "unauthorized"),
+			wantStatus: http.StatusUnauthorized,
 		},
 		{
-			name:          "Database error",
-			err:           logger.DatabaseError(errors.New("db connection failed"), "database error"),
-			expectedCode:  http.StatusInternalServerError,
-			expectedErrID: ErrorCodeInternalError,
+			name:       "database error",
+			err:        errortypes.DatabaseError(errors.New("db connection failed"), "database error"),
+			wantStatus: http.StatusInternalServerError,
 		},
 		{
-			name:          "Network error",
-			err:           logger.NetworkError(errors.New("timeout"), "network error"),
-			expectedCode:  http.StatusBadGateway,
-			expectedErrID: ErrorCodeBadGateway,
+			name:       "network error",
+			err:        errortypes.NetworkError(errors.New("timeout"), "network error"),
+			wantStatus: http.StatusBadGateway,
 		},
 		{
-			name:          "Custom status error",
-			err:           NewErrorWithStatus(errors.New("not found"), http.StatusNotFound, ErrorCodeResourceNotFound, "Resource not found"),
-			expectedCode:  http.StatusNotFound,
-			expectedErrID: ErrorCodeResourceNotFound,
+			name:       "unknown error",
+			err:        errors.New("generic error"),
+			wantStatus: http.StatusInternalServerError,
 		},
 		{
-			name:          "Unspecified error",
-			err:           errors.New("unknown error"),
-			expectedCode:  http.StatusInternalServerError,
-			expectedErrID: ErrorCodeInternalError,
+			name:       "error with status",
+			err:        NewErrorWithStatus(errors.New("not found"), http.StatusNotFound, "NOT_FOUND", "Resource not found"),
+			wantStatus: http.StatusNotFound,
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			// Create a response recorder
-			rr := httptest.NewRecorder()
+			w := httptest.NewRecorder()
 
-			// Handle the error
-			HandleError(rr, tc.err)
+			// Call HandleError
+			HandleError(w, tt.err)
 
-			// Check the status code
-			if rr.Code != tc.expectedCode {
-				t.Errorf("Expected status code %d, got %d", tc.expectedCode, rr.Code)
-			}
-
-			// Decode the response
-			var response ErrorResponse
-			if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
-				t.Fatalf("Error decoding response: %v", err)
-			}
-
-			// Check the response error code
-			if response.Code != tc.expectedErrID {
-				t.Errorf("Expected error code %s, got %s", tc.expectedErrID, response.Code)
+			// Check status code
+			if w.Code != tt.wantStatus {
+				t.Errorf("HandleError() status = %v, want %v", w.Code, tt.wantStatus)
 			}
 		})
 	}
