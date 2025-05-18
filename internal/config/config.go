@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/localrivet/configurator"
-	"github.com/localrivet/gomcp/logx"
 )
 
 // Global configuration instance
@@ -185,7 +184,32 @@ func (c *Config) GetConfigPath() string {
 	return c.configPath
 }
 
-// GetLoggerFromConfig creates a gomcp logx.Logger based on the configuration
-func GetLoggerFromConfig(cfg *Config) logx.Logger {
-	return logx.NewLogger(cfg.Logging.Level)
+// GetLoggerFromConfig creates a slog.Logger based on the configuration
+func GetLoggerFromConfig(cfg *Config) *slog.Logger {
+	var level slog.Level
+	switch cfg.Logging.Level {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+
+	var handler slog.Handler
+	if cfg.Logging.Format == "json" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: level,
+		})
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: level,
+		})
+	}
+
+	return slog.New(handler)
 }

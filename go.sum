@@ -38,6 +38,8 @@ github.com/localrivet/configurator v0.0.0-20250512175823-40e1d85f761e h1:wgY5RYm
 github.com/localrivet/configurator v0.0.0-20250512175823-40e1d85f761e/go.mod h1:EhcgqCkMA+r2PLYo0D9C4LVp33mteP3xwQR9o0bI6uI=
 github.com/localrivet/gomcp v1.1.4 h1:qIFAZyyCU/oNpQ27qFmje9+13XuV1F39QgYOez9T0Go=
 github.com/localrivet/gomcp v1.1.4/go.mod h1:hJhlsxpNVyOtdyY6EUgpslQcIaUPIcJWnpqRE6X5rYs=
+github.com/localrivet/gomcp v1.2.1 h1:PRzAPhLh5V1x8uYF/vKJU7xTR0JLBVW7o7ptEx6qalE=
+github.com/localrivet/gomcp v1.2.1/go.mod h1:gNf2qq4zTsJ9OJRgMISkddJxHKG3GoIbcFJFWWtEw1I=
 github.com/localrivet/wilduri v0.0.0-20250504021349-6ce732e97cca h1:q0KYRv+ktfm8KnMROXcRNJEnfXSI3NZ45aMC8T/mg14=
 github.com/localrivet/wilduri v0.0.0-20250504021349-6ce732e97cca/go.mod h1:8B25VIq6WUPYAdY3aodQnj/hDNmYTcPgzzc7ZZ1++NI=
 github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyuac5Z2hdY=

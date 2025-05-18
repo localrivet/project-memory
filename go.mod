@@ -5,7 +5,7 @@ go 1.24.2
 require (
 	crawshaw.io/sqlite v0.3.2
 	github.com/localrivet/configurator v0.0.0-20250512175823-40e1d85f761e
-	github.com/localrivet/gomcp v1.1.4
+	github.com/localrivet/gomcp v1.2.1
 )
 
 require (
