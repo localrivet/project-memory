@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/localrivet/gomcp"
 	"github.com/localrivet/gomcp/server"
 	"github.com/localrivet/projectmemory/internal/contextstore"
 	"github.com/localrivet/projectmemory/internal/errortypes"
@@ -29,7 +28,7 @@ type MCPContextToolServer struct {
 	store      contextstore.ContextStore
 	summarizer summarizer.Summarizer
 	embedder   vector.Embedder
-	mcpServer  *server.Server
+	mcpServer  server.Server
 }
 
 // NewContextToolServer creates a new MCPContextToolServer instance.
@@ -50,23 +49,29 @@ func (s *MCPContextToolServer) Initialize() error {
 	}
 
 	// Create the MCP server
-	s.mcpServer = gomcp.NewServer("projectmemory").
-		// Register save_context tool
-		Tool(tools.ToolSaveContext, "Save context to the persistent memory store",
-			s.handleSaveContext).
-		// Register retrieve_context tool
-		Tool(tools.ToolRetrieveContext, "Retrieve relevant context based on a query",
-			s.handleRetrieveContext).
-		// Register delete_context tool
-		Tool(tools.ToolDeleteContext, "Delete a specific context entry by ID",
-			s.handleDeleteContext).
-		// Register clear_all_context tool
-		Tool(tools.ToolClearAllContext, "Clear all context entries from the store",
-			s.handleClearAllContext).
-		// Register replace_context tool
-		Tool(tools.ToolReplaceContext, "Replace an existing context entry with new content",
-			s.handleReplaceContext)
+	srv := server.NewServer("projectmemory")
 
+	// Register save_context tool
+	srv = srv.Tool(tools.ToolSaveContext, "Save context to the persistent memory store",
+		s.handleSaveContext)
+
+	// Register retrieve_context tool
+	srv = srv.Tool(tools.ToolRetrieveContext, "Retrieve relevant context based on a query",
+		s.handleRetrieveContext)
+
+	// Register delete_context tool
+	srv = srv.Tool(tools.ToolDeleteContext, "Delete a specific context entry by ID",
+		s.handleDeleteContext)
+
+	// Register clear_all_context tool
+	srv = srv.Tool(tools.ToolClearAllContext, "Clear all context entries from the store",
+		s.handleClearAllContext)
+
+	// Register replace_context tool
+	srv = srv.Tool(tools.ToolReplaceContext, "Replace an existing context entry with new content",
+		s.handleReplaceContext)
+
+	s.mcpServer = srv
 	slog.Info("MCP Context Tool Server initialized successfully", "tool_count", 5)
 	return nil
 }
@@ -80,9 +85,8 @@ func (s *MCPContextToolServer) Start() error {
 	slog.Info("Starting MCP Context Tool Server")
 
 	// Start the server using stdio transport
-	s.mcpServer.AsStdio().Run()
-
-	return nil
+	stdioServer := s.mcpServer.AsStdio()
+	return stdioServer.Run()
 }
 
 // Stop gracefully shuts down the MCP server.

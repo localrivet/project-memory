@@ -1,16 +1,16 @@
-# Project-Memory logx Integration Requirements
+# Project-Memory Logging Integration Requirements
 
 ## Overview
 
-We need project-memory to use the gomcp/logx package in a way that allows importing projects to control all logging output in MCP mode, ensuring no logs corrupt the stdio JSON-RPC transport.
+We need project-memory to use the standard Go `log/slog` package in a way that allows importing projects to control all logging output in MCP mode, ensuring no logs corrupt the stdio JSON-RPC transport.
 
 ## Key Requirements
 
-1. **Accept a pre-configured logx.Logger:**
+1. **Accept a pre-configured slog.Logger:**
 
-   - Project-memory should accept a logx.Logger in its initialization
+   - Project-memory should accept a `*slog.Logger` in its initialization
    - This logger should be used throughout project-memory for all logging
-   - Example API: `NewMemoryManager(storagePath string, logger logx.Logger) (*MemoryManager, error)`
+   - Example API: `NewMemoryManager(storagePath string, logger *slog.Logger) (*MemoryManager, error)`
 
 2. **Pass the logger to gomcp:**
 
@@ -24,7 +24,7 @@ We need project-memory to use the gomcp/logx package in a way that allows import
 3. **No direct stdout/stderr usage:**
 
    - Never use fmt.Print*/log.Print* directly
-   - Always use the provided logx.Logger methods:
+   - Always use the provided slog.Logger methods:
 
      ```go
      // DO NOT use:
@@ -33,7 +33,7 @@ We need project-memory to use the gomcp/logx package in a way that allows import
 
      // INSTEAD use:
      logger.Info("Initializing memory")
-     logger.Error("Error: %v", err)
+     logger.Error("Error initializing", "error", err)
      ```
 
 4. **Log level respect:**
@@ -41,37 +41,25 @@ We need project-memory to use the gomcp/logx package in a way that allows import
    - Never override the log level set by the parent application
    - The logger will already have the appropriate level set
 
-5. **Required logger interface:**
-   ```go
-   // This is the minimum interface required
-   type Logger interface {
-     Debug(format string, args ...interface{})
-     Info(format string, args ...interface{})
-     Warn(format string, args ...interface{})
-     Error(format string, args ...interface{})
-     SetLevel(level string)
-   }
-   ```
-
 ## Implementation Example
 
 ```go
 package projectmemory
 
 import (
-  "github.com/localrivet/gomcp/logx"
+  "log/slog"
   "github.com/localrivet/gomcp/server"
 )
 
 type MemoryManager struct {
-  logger logx.Logger
+  logger *slog.Logger
   // other fields...
 }
 
-func NewMemoryManager(storagePath string, logger logx.Logger) (*MemoryManager, error) {
+func NewMemoryManager(storagePath string, logger *slog.Logger) (*MemoryManager, error) {
   if logger == nil {
     // Default logger only if none provided
-    logger = logx.NewLogger("info")
+    logger = slog.Default()
   }
 
   manager := &MemoryManager{
@@ -80,7 +68,7 @@ func NewMemoryManager(storagePath string, logger logx.Logger) (*MemoryManager, e
   }
 
   // Log using the provided logger
-  manager.logger.Info("Initializing memory manager at %s", storagePath)
+  manager.logger.Info("Initializing memory manager", "path", storagePath)
 
   // When creating MCP components, use the same logger
   mcpServer := server.NewServer("memory-server")

@@ -93,18 +93,21 @@ When embedding ProjectMemory in your application, you can override the default l
 
 ```go
 import (
-    "github.com/localrivet/gomcp/logx"
+    "log/slog"
+    "os"
     "github.com/localrivet/projectmemory"
 )
 
 func main() {
     // Create your custom logger
-    logger := logx.NewLogger("debug")
+    logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+        Level: slog.LevelDebug,
+    }))
 
     // Initialize the server with your custom logger
     server, err := projectmemory.NewServer(".projectmemoryconfig", logger)
     if err != nil {
-        logger.Error("Failed to create server: %v", err)
+        logger.Error("Failed to create server", "error", err)
     }
 
     // Alternatively, you can create a server first and then set the logger

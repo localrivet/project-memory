@@ -75,7 +75,8 @@ This approach uses a helper function to create all the components at once, which
 
 ```go
 import (
-    "github.com/localrivet/gomcp/logx"
+    "log/slog"
+    "os"
     "github.com/localrivet/projectmemory"
     "github.com/localrivet/projectmemory/internal/config"
 )
@@ -89,7 +90,9 @@ func main() {
     config.Embedder.Dimensions = 768 // or use vector.DefaultEmbeddingDimensions
 
     // Create a logger
-    logger := logx.NewLogger("info")
+    logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+        Level: slog.LevelInfo,
+    }))
 
     // Initialize all components at once
     store, summ, emb, err := projectmemory.CreateComponents(config, logger)
@@ -111,7 +114,8 @@ This approach uses the high-level Server API but avoids starting the MCP server.
 
 ```go
 import (
-    "github.com/localrivet/gomcp/logx"
+    "log/slog"
+    "os"
     "github.com/localrivet/projectmemory"
 )
 
@@ -120,7 +124,9 @@ func main() {
     configPath := ".projectmemoryconfig"
 
     // Create a logger
-    logger := logx.NewLogger("info")
+    logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+        Level: slog.LevelInfo,
+    }))
 
     // Create and initialize server
     pmServer, err := projectmemory.NewServer(configPath, logger)
@@ -173,10 +179,11 @@ When you have your own MCP server, you can integrate ProjectMemory's functionali
 
 ```go
 import (
+    "log/slog"
+    "os"
     "time"
 
     "github.com/localrivet/gomcp"
-    "github.com/localrivet/gomcp/logx"
     gomcpserver "github.com/localrivet/gomcp/server"
 
     "github.com/localrivet/projectmemory/internal/contextstore"
@@ -191,7 +198,9 @@ func main() {
     // ...
 
     // Create logger
-    logger := logx.NewLogger("info")
+    logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+        Level: slog.LevelInfo,
+    }))
 
     // Create your own MCP server
     mcpServer := gomcp.NewServer("your-mcp-server")
@@ -347,16 +356,19 @@ func main() {
 
 ## Custom Logging
 
-When embedding ProjectMemory in your application, you may want to integrate with your application's existing logging system. ProjectMemory uses `github.com/localrivet/gomcp/logx` for logging:
+When embedding ProjectMemory in your application, you may want to integrate with your application's existing logging system. ProjectMemory uses Go's standard `log/slog` package for logging:
 
 ```go
 import (
-    "github.com/localrivet/gomcp/logx"
+    "log/slog"
+    "os"
     "github.com/localrivet/projectmemory"
 )
 
 // Create a logger
-logger := logx.NewLogger("info") // or "debug", "warn", "error"
+logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+    Level: slog.LevelInfo, // or LevelDebug, LevelWarn, LevelError
+}))
 
 // Use it with ProjectMemory
 config := &config.Config{}
@@ -374,52 +386,58 @@ store, summ, emb, err := projectmemory.CreateComponents(config, logger)
 
 ## Standard Logger Integration
 
-ProjectMemory provides functions to integrate with Go's standard library logging package. This is useful when working with code that uses the standard `log` package but you want to take advantage of ProjectMemory's logging capabilities.
+ProjectMemory provides functions to integrate with Go's standard library logging package. This is useful when working with code that uses the standard `log` package but you want to take advantage of ProjectMemory's slog-based logging capabilities.
 
-### Creating a Standard Logger Backed by LogX
+### Creating a Standard Logger Backed by slog
 
-You can create a standard library `*log.Logger` that's backed by a LogX logger:
+You can create a standard library `*log.Logger` that's backed by a slog logger:
 
 ```go
 import (
     "log"
-    "github.com/localrivet/gomcp/logx"
+    "log/slog"
+    "os"
     "github.com/localrivet/projectmemory"
 )
 
-// Create a LogX logger
-logger := logx.NewLogger("info")
+// Create a slog logger
+logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+    Level: slog.LevelInfo,
+}))
 
-// Create a standard logger that uses LogX
+// Create a standard logger that uses slog
 stdLogger := projectmemory.AsStdLogger(logger, projectmemory.InfoLevel)
 
 // Use the standard logger as usual
-stdLogger.Println("This message is processed by LogX")
+stdLogger.Println("This message is processed by slog")
 stdLogger.Printf("User %s logged in", username)
 ```
 
 ### Replacing the Global Standard Logger
 
-For broader integration, you can completely replace Go's global standard logger with a LogX-powered version:
+For broader integration, you can completely replace Go's global standard logger with a slog-powered version:
 
 ```go
 import (
     "log"
-    "github.com/localrivet/gomcp/logx"
+    "log/slog"
+    "os"
     "github.com/localrivet/projectmemory"
 )
 
-// Create a LogX logger
-logger := logx.NewLogger("info")
+// Create a slog logger
+logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+    Level: slog.LevelInfo,
+}))
 
 // Replace the global standard logger
 projectmemory.ReplaceStdLogger(logger, projectmemory.InfoLevel)
 
-// Now all standard log calls use LogX
-log.Println("This message uses LogX")
+// Now all standard log calls use slog
+log.Println("This message uses slog")
 log.Printf("Request received: %s", requestID)
 
-// Even third-party libraries using the standard logger will now use LogX
+// Even third-party libraries using the standard logger will now use slog
 ```
 
 ### Log Levels
@@ -444,7 +462,7 @@ This feature is particularly useful when:
 
 - Integrating with existing code that uses the standard logger
 - Working with third-party libraries that use the standard logger
-- Gradually migrating a codebase to use LogX
+- Gradually migrating a codebase to use slog
 
 ## Complete Example
 

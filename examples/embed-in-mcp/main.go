@@ -3,13 +3,9 @@ package main
 import (
 	"log"
 	"os"
-
-	"github.com/localrivet/gomcp"
-	gomcpserver "github.com/localrivet/gomcp/server"
-
-	// Import the projectmemory packages
 	"time"
 
+	"github.com/localrivet/gomcp/server"
 	"github.com/localrivet/projectmemory/internal/contextstore"
 	pmserver "github.com/localrivet/projectmemory/internal/server" // Import with alias to avoid conflict
 	"github.com/localrivet/projectmemory/internal/summarizer"
@@ -139,12 +135,12 @@ func main() {
 	// ====================================================================
 
 	// Create your own MCP server
-	mcpServer := gomcp.NewServer("combined-mcp-server")
+	mcpServer := server.NewServer("combined-mcp-server")
 	// No need to set logger for the MCP server since it will use the standard log
 
 	// Register your own tools
 	mcpServer = mcpServer.Tool("your_custom_tool", "Description of your custom tool",
-		func(ctx *gomcpserver.Context, req YourCustomRequest) (YourCustomResponse, error) {
+		func(ctx *server.Context, req YourCustomRequest) (YourCustomResponse, error) {
 			// Your tool implementation
 			return YourCustomResponse{}, nil
 		})
@@ -154,7 +150,7 @@ func main() {
 
 	// Save context tool implementation
 	mcpServer = mcpServer.Tool(tools.ToolSaveContext, "Save context to the persistent memory store",
-		func(ctx *gomcpserver.Context, req tools.SaveContextRequest) (tools.SaveContextResponse, error) {
+		func(ctx *server.Context, req tools.SaveContextRequest) (tools.SaveContextResponse, error) {
 			response := tools.SaveContextResponse{
 				Status: "success",
 			}
@@ -206,7 +202,7 @@ func main() {
 
 	// Retrieve context tool implementation
 	mcpServer = mcpServer.Tool(tools.ToolRetrieveContext, "Retrieve relevant context based on a query",
-		func(ctx *gomcpserver.Context, req tools.RetrieveContextRequest) (tools.RetrieveContextResponse, error) {
+		func(ctx *server.Context, req tools.RetrieveContextRequest) (tools.RetrieveContextResponse, error) {
 			response := tools.RetrieveContextResponse{
 				Status: "success",
 			}
@@ -245,7 +241,8 @@ func main() {
 
 	// Start your combined MCP server
 	log.Printf("Starting combined MCP server with ProjectMemory tools...")
-	mcpServer.AsStdio().Run()
+	stdioServer := mcpServer.AsStdio()
+	stdioServer.Run()
 }
 
 // Example custom request/response types for your own tools
